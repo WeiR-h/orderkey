@@ -155,3 +155,92 @@ test "bounds and prefixes reject incompatible input" {
     is @orderkey.TypeMismatch(0),
   )
 }
+
+///|
+test "tuple bounds cut timestamp ties in configured index order" {
+  let spec = @orderkey.KeySpec::new([
+    BytesField(Asc),
+    Int64Field(Desc),
+    Int64Field(Asc),
+    BytesField(Desc),
+  ])
+  let prefix : Array[@orderkey.Value] = [Binary(b"device")]
+  let range = spec.tuple_range(
+    prefix,
+    TupleInclusive([Signed(5L), Signed(1L)]),
+    TupleExclusive([Signed(4L), Signed(2L)]),
+  )
+  for
+    (timestamp, sequence, expected) in [
+      (6L, 1L, false),
+      (5L, 0L, false),
+      (5L, 1L, true),
+      (5L, 2L, true),
+      (4L, 0L, true),
+      (4L, 1L, true),
+      (4L, 2L, false),
+      (3L, 1L, false),
+    ] {
+    for suffix in [b"", b"\xff"] {
+      let key = spec.encode([
+        Binary(b"device"),
+        Signed(timestamp),
+        Signed(sequence),
+        Binary(suffix),
+      ])
+      assert_eq(range.contains(key), expected)
+    }
+  }
+  assert_eq(
+    spec.tuple_range(
+      prefix,
+      TupleInclusive([Signed(5L)]),
+      TupleInclusive([Signed(5L)]),
+    ),
+    spec.prefix_range([Binary(b"device"), Signed(5L)]),
+  )
+  let unequal_lengths = spec.tuple_range(
+    prefix,
+    TupleExclusive([Signed(5L), Signed(1L)]),
+    TupleInclusive([Signed(4L)]),
+  )
+  assert_false(
+    unequal_lengths.contains(
+      spec.encode([Binary(b"device"), Signed(5L), Signed(1L), Binary(b"")]),
+    ),
+  )
+  assert_true(
+    unequal_lengths.contains(
+      spec.encode([Binary(b"device"), Signed(4L), Signed(2L), Binary(b"")]),
+    ),
+  )
+}
+
+///|
+test "tuple ranges validate endpoint width and types" {
+  let spec = @orderkey.KeySpec::new([BytesField(Asc), Int64Field(Desc)])
+  assert_true(
+    key_error(() => spec.tuple_range([], TupleExclusive([]), TupleUnbounded))
+    is @orderkey.InvalidTupleLength(0),
+  )
+  assert_true(
+    key_error(() => {
+      spec.tuple_range(
+        [Binary(b"p")],
+        TupleUnbounded,
+        TupleInclusive([Signed(2L), Signed(0L)]),
+      )
+    })
+    is @orderkey.InvalidTupleLength(2),
+  )
+  assert_true(
+    key_error(() => {
+      spec.tuple_range(
+        [Binary(b"p")],
+        TupleInclusive([Binary(b"wrong")]),
+        TupleUnbounded,
+      )
+    })
+    is @orderkey.TypeMismatch(1),
+  )
+}

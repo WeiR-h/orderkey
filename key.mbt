@@ -35,6 +35,10 @@ pub suberror KeyError {
   InvalidEscape(Int32)
   TrailingBytes(Int32)
   CursorOutsideRange
+  InvalidLayout(Int32)
+  UnsupportedKeyFormat(Byte)
+  LayoutMismatch
+  InvalidTupleLength(Int32)
 }
 
 ///|
@@ -110,10 +114,21 @@ fn KeySpec::encode_prefix(
   values : Array[Value],
 ) -> Bytes raise KeyError {
   let output = @buffer.Buffer()
-  for index, value in values {
+  self.write_values(output, 0, values)
+  output.to_bytes()
+}
+
+///|
+fn KeySpec::write_values(
+  self : KeySpec,
+  output : @buffer.Buffer,
+  start : Int32,
+  values : Array[Value],
+) -> Unit raise KeyError {
+  for offset, value in values {
+    let index = start + offset
     write_field(output, self.fields[index], value, index)
   }
-  output.to_bytes()
 }
 
 ///|

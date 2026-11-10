@@ -18,6 +18,10 @@ pub suberror KeyError {
   InvalidEscape(Int32)
   TrailingBytes(Int32)
   CursorOutsideRange
+  InvalidLayout(Int32)
+  UnsupportedKeyFormat(Byte)
+  LayoutMismatch
+  InvalidTupleLength(Int32)
 }
 pub fn KeyError::to_repr(Self) -> @debug.Repr
 
@@ -54,9 +58,19 @@ pub struct KeySpec {
 pub fn KeySpec::decode(Self, Bytes) -> Array[Value] raise KeyError
 pub fn KeySpec::encode(Self, Array[Value]) -> Bytes raise KeyError
 pub fn KeySpec::field_range(Self, Array[Value], Bound, Bound) -> ByteRange raise KeyError
+pub fn KeySpec::from_layout(Bytes) -> Self raise KeyError
+pub fn KeySpec::layout(Self) -> Bytes
 pub fn KeySpec::new(Array[Field]) -> Self raise KeyError
 pub fn KeySpec::prefix_range(Self, Array[Value]) -> ByteRange raise KeyError
+pub fn KeySpec::require_layout(Self, Bytes) -> Unit raise KeyError
 pub fn KeySpec::resume_after(Self, ByteRange, Bytes) -> ByteRange raise KeyError
+pub fn KeySpec::tuple_range(Self, Array[Value], TupleBound, TupleBound) -> ByteRange raise KeyError
+
+pub(all) enum TupleBound {
+  TupleUnbounded
+  TupleInclusive(Array[Value])
+  TupleExclusive(Array[Value])
+}
 
 #derive(Eq, @debug.Debug)
 pub(all) enum Value {

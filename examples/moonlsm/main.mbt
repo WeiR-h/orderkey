@@ -36,6 +36,8 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
   ])
   let storage = @moonlsm.MemStorage::new()
   let writer = @moonlsm.Db::open(storage, MEMTABLE_LIMIT)
+  let layout_key = b"\x00orderkey-layout"
+  writer.put_deferred(layout_key, spec.layout()) |> ignore
   let tenants = [
     b"t0", b"t1", b"t2", b"t3", b"t4", b"t5", b"t6", b"t7", b"t8", b"t9",
   ]
@@ -72,9 +74,13 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
   let sst_files = storage.names().filter(name => name.has_suffix(".sst"))
   assert_true(!sst_files.is_empty())
   let db = @moonlsm.Db::open(storage, MEMTABLE_LIMIT)
+  match db.get(layout_key) {
+    Some(layout) => spec.require_layout(layout)
+    None => abort("missing OrderKey layout")
+  }
 
-  // The fixture uses ASCII tenant prefixes, so every fixture key is below FF.
-  let full_scan = db.scan(b"", b"\xff", count + 1)
+  // Fixture keys begin with ASCII tenant bytes. The layout key lives below 01.
+  let full_scan = db.scan(b"\x01", b"\xff", count + 1)
   assert_eq(full_scan.length(), count)
   let filtered = []
   for row in full_scan {
@@ -122,6 +128,19 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
   }
   assert_eq(observed, expected)
 
+  let tuple_range = spec.tuple_range(
+    [Binary(b"t3"), Binary(b"pump\x00A")],
+    TupleInclusive([Signed(3L), Signed(1L)]),
+    TupleExclusive([Signed(2L), Signed(2L)]),
+  )
+  let tuple_rows = scan_range(db, tuple_range, count + 1)
+  assert_eq(tuple_rows.map(fn(row) { (row.key, row.value) }), [
+    indexed_pairs[1],
+    indexed_pairs[2],
+    indexed_pairs[3],
+    indexed_pairs[4],
+  ])
+
   let paged = []
   let page_sizes = []
   let mut window = range
@@ -148,7 +167,7 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
       println("match,\{@hex.encode(row.key[:])}")
     }
   }
-  println("OrderKey 0.0.1 / MoonLSM 0.3.2")
+  println("OrderKey 0.0.2 / MoonLSM 0.3.2")
   println(
     "fixture: \{count} records, \{sst_files.length()} SSTable files, reopened",
   )
@@ -163,6 +182,9 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
     "OrderKey bounds: \{indexed.length()} rows, \{payload_bytes(indexed)} payload bytes",
   )
   println("verified: identical results, pages 5 / 5 / 5 / 3")
+  println(
+    "layout verified on reopen, tuple range returned \{tuple_rows.length()} rows",
+  )
 }
 
 ///|

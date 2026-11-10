@@ -7,6 +7,14 @@ pub(all) enum Bound {
 }
 
 ///|
+/// A bound on one or more consecutive fields, in the index's configured order.
+pub(all) enum TupleBound {
+  TupleUnbounded
+  TupleInclusive(Array[Value])
+  TupleExclusive(Array[Value])
+}
+
+///|
 /// A half-open byte range. A missing upper bound means positive infinity.
 #derive(Eq, Debug)
 pub(all) enum ByteRange {
@@ -71,26 +79,68 @@ pub fn KeySpec::prefix_range(
 }
 
 ///|
-fn encode_endpoint(
+fn KeySpec::tuple_endpoint(
+  self : KeySpec,
   prefix : Bytes,
-  field : Field,
   index : Int32,
-  bound : Bound,
+  bound : TupleBound,
   is_start : Bool,
 ) -> Bytes? raise KeyError {
-  let (value, inclusive) = match bound {
-    Unbounded => return if is_start { Some(prefix) } else { prefix_end(prefix) }
-    Inclusive(value) => (value, true)
-    Exclusive(value) => (value, false)
+  let (values, inclusive) = match bound {
+    TupleUnbounded =>
+      return if is_start { Some(prefix) } else { prefix_end(prefix) }
+    TupleInclusive(values) => (values, true)
+    TupleExclusive(values) => (values, false)
+  }
+  if values.is_empty() || values.length() > self.fields.length() - index {
+    raise InvalidTupleLength(values.length())
   }
   let output = @buffer.from_bytes(prefix[:])
-  write_field(output, field, value, index)
+  self.write_values(output, index, values)
   let key = output.to_bytes()
   // Inclusive starts and exclusive ends already have the required byte bound.
   if inclusive == is_start {
     Some(key)
   } else {
     prefix_end(key)
+  }
+}
+
+///|
+fn KeySpec::compile_tuple_range(
+  self : KeySpec,
+  prefix : Array[Value],
+  first : TupleBound,
+  last : TupleBound,
+) -> ByteRange raise KeyError {
+  let encoded_prefix = self.encode_prefix(prefix)
+  let index = prefix.length()
+  let start = self.tuple_endpoint(encoded_prefix, index, first, true)
+  let end = self.tuple_endpoint(encoded_prefix, index, last, false)
+  bounded_span(start, end)
+}
+
+///|
+/// Each bounded endpoint supplies at least one field after the fixed prefix.
+/// Inclusion or exclusion applies to every key that shares that endpoint.
+pub fn KeySpec::tuple_range(
+  self : KeySpec,
+  prefix : Array[Value],
+  first : TupleBound,
+  last : TupleBound,
+) -> ByteRange raise KeyError {
+  if prefix.length() >= self.fields.length() {
+    raise InvalidPrefixLength(prefix.length())
+  }
+  self.compile_tuple_range(prefix, first, last)
+}
+
+///|
+fn Bound::as_tuple(self : Bound) -> TupleBound {
+  match self {
+    Unbounded => TupleUnbounded
+    Inclusive(value) => TupleInclusive([value])
+    Exclusive(value) => TupleExclusive([value])
   }
 }
 
@@ -107,15 +157,11 @@ pub fn KeySpec::field_range(
   if index >= self.fields.length() {
     raise InvalidPrefixLength(index)
   }
-  let encoded_prefix = self.encode_prefix(prefix)
-  let field = self.fields[index]
-  let (first, last) = match field.direction() {
+  let (first, last) = match self.fields[index].direction() {
     Asc => (lower, upper)
     Desc => (upper, lower)
   }
-  let start = encode_endpoint(encoded_prefix, field, index, first, true)
-  let end = encode_endpoint(encoded_prefix, field, index, last, false)
-  bounded_span(start, end)
+  self.compile_tuple_range(prefix, first.as_tuple(), last.as_tuple())
 }
 
 ///|
