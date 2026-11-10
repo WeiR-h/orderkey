@@ -17,7 +17,7 @@ WEATHER = Path(__file__).with_name("fixtures") / "noaa-ghcnd-2024-q1.csv"
 WEATHER_SHA256 = "8b95d0fc273a6af5b13593f9c5b51259304f1d212abe2cb3150c3d3f58094308"
 
 
-def read_fixture(target, arguments, expected_counts, project=PROJECT):
+def run_fixture(target, arguments, project=PROJECT):
     result = subprocess.run(
         ["moon", "run", "--target", target, "examples/moonlsm", "--", *arguments],
         cwd=project,
@@ -27,10 +27,14 @@ def read_fixture(target, arguments, expected_counts, project=PROJECT):
     )
     if result.returncode:
         raise RuntimeError(result.stderr or result.stdout)
+    return result.stdout.splitlines()
+
+
+def read_fixture(target, arguments, expected_counts, project=PROJECT):
     rows = []
     matches = []
     snapshot_matches = []
-    for line in result.stdout.splitlines():
+    for line in run_fixture(target, arguments, project):
         if line.startswith("key,"):
             _, tenant, device, timestamp, sequence, key = line.split(",")
             rows.append(

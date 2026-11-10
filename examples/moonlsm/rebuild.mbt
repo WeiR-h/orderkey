@@ -171,13 +171,11 @@ fn run_reindex(
 
   let staging = @moonlsm.MemStorage::new()
   let writer = @moonlsm.Db::open(staging, MEMTABLE_LIMIT)
-  write_reindexed(
+  stage_reindexed(
     writer,
     plan,
     source_rows.map(fn(row) { (row.key, row.value) }),
   )
-  writer.sync()
-  writer.flush()
   writer.close()
   staging.write_file("orderkey.contract", target.to_bytes())
   staging.sync_file("orderkey.contract")

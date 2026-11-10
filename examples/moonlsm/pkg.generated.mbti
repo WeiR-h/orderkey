@@ -4,6 +4,7 @@ package "orderkey/moonlsm_demo"
 // Values
 
 // Errors
+type RebuildError
 
 // Types and methods
 

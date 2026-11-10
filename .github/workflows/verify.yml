@@ -31,4 +31,5 @@ jobs:
       - run: moon test --deny-warn --target wasm-gc .
       - run: moon test --deny-warn --target js .
       - run: python examples/moonlsm/verify_sqlite.py --baseline
+      - run: python examples/moonlsm/verify_reindex.py --report reindex-report.json
       - run: moon package --list
