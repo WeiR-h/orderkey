@@ -6,7 +6,7 @@ OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储�
 
 ## 复现
 
-在完整项目的根目录运行。此版本使用 MoonBit v0.10.20 工具链验证，MoonLSM 演示的 JS 后端需要 Node.js。 [MoonBit 工具链下载](https://www.moonbitlang.com/download/)
+在完整项目的根目录运行。完整源码见 [GitHub](https://github.com/WeiR-h/orderkey)。此版本使用 MoonBit v0.10.20 工具链验证，MoonLSM 演示的 JS 后端需要 Node.js。 [MoonBit 工具链下载](https://www.moonbitlang.com/download/)
 
 ```sh
 moon update
@@ -22,7 +22,7 @@ moon run --target js examples/moonlsm
 python examples/moonlsm/verify_sqlite.py
 ```
 
-在有本地 `v0.0.1` Git 标签的工作区，可以加 `--baseline` 从干净目录重新编译早期版本，并核对两个版本的键字节。
+在有本地 `v0.0.1` Git 标签的工作区，可以加 `--baseline` 从干净目录重建 v0.0.1 和 v0.0.4，并核对两个版本的键字节。
 
 核心库只依赖 MoonBit 标准库。工作区的演示使用 [MoonLSM 0.3.2](https://mooncakes.io/docs/PingGuoMiaoMiao/moonlsm%400.3.2) 和 [MoonFST 0.1.1](https://mooncakes.io/docs/starAndHonor/fst%400.1.1)。
 
@@ -31,7 +31,7 @@ python examples/moonlsm/verify_sqlite.py
 从 Mooncakes 安装当前公开版本。
 
 ```sh
-moon add WeiR-h/orderkey
+moon add WeiR-h/orderkey@0.0.8
 ```
 
 在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。
@@ -58,6 +58,24 @@ fn make_query() -> (Bytes, @orderkey.ByteRange) raise @orderkey.KeyError {
 - `layout` 生成持久化布局描述符，`from_layout` 可恢复布局，`require_layout` 用于重新打开索引时检查已有布局和调用方预期是否一致。
 - `Span(start, Some(end))` 表示 `[start, end)`，`Span(start, None)` 表示上界无穷，`Empty` 表示空区间。范围语义针对按同一布局写入的完整键。
 - `resume_after` 检查游标是否是范围内的完整键，并排除该键。需要并发写入期间稳定翻页时，存储层须提供一致的读快照。
+
+## 离线换序与验收
+
+在有序 KV 上自建索引时，保存 IndexContract 描述符。它包含稳定的索引 ID、代次和按顺序排列的字段 ID。交换两个升序字节字段时，原有布局的类型标签一样，新的契约能识别字段含义变化。旧索引的字段 ID 由应用显式提供。
+
+- 用 IndexContract::new 建立源和目标契约。打开索引时通过 require_same 验证保存的描述符。
+- 调用 ReindexPlan::new 预检重排与方向变更，然后对冻结记录调用 rekey，把新键与原载荷写入独立目标。目标代次递增，字段 ID 及其类型对应一致。
+- 续读时将原始区间、存储层提供的稳定快照 ID 和实际末键传入 issue_cursor。resume_cursor 检查同一索引、代次、快照和区间。公开接口的游标应由应用层鉴别完整性。
+- 重开并核对目标后，由调用方决定何时切换。示例使用 MoonLSM 的 MemStorage 重开 SSTable，并从目标记录生成、重载 MoonFST，只读索引保存目标记录序号。
+
+在完整源码的根目录，用 Python 3.10+、Node.js 与 MoonBit 运行。
+
+```sh
+moon update
+python examples/moonlsm/verify_reindex.py --report reindex-report.json
+```
+
+报告逐项记录源与目标契约、行数、重复数、源前后 SHA-256、查询结果 SHA-256 和首个差异。源摘要覆盖引擎扫描出的键值载荷。ready 表示此轮复验的目标可作为切换候选。负向检查覆盖错误布局、旧游标、坏键、目标重复和存储写入失败。SQLite 按原始类型和值独立验证合成遥测和 NOAA 观测。
 
 ## v1 键格式
 
@@ -92,7 +110,7 @@ MoonFST 快照只包含键和记录序号，真实键值内容仍由 MoonLSM 返
 
 ## 公开数据样本
 
-样本来自 NOAA NCEI 的 GHCNd Daily Summaries。原始 CSV 包含三个美国测站在 2024 年第一季度的 273 条观测，保留 `STATION`、`DATE`、`TMAX`、`TMIN` 四列。脚本先检查原始字节的 SHA-256，再把日期按 `YYYYMMDD` 写入降序索引，温度作为原样文本值写入 MoonLSM。 [原始 CSV](examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv) · [NOAA 数据接口](https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094846,USW00024233,USW00094728&startDate=2024-01-01&endDate=2024-03-31&dataTypes=TMAX,TMIN&units=metric&format=csv) · [NCEI 开放数据政策](https://www.ncei.noaa.gov/sites/default/files/2023-12/NCEI%20PD-10-2-02%20-%20Open%20Data%20Policy%20Signed.pdf)
+样本来自 NOAA NCEI 的 GHCNd Daily Summaries。原始 CSV 包含三个美国测站在 2024 年第一季度的 273 条观测，保留 `STATION`、`DATE`、`TMAX`、`TMIN` 四列。脚本先检查原始字节的 SHA-256，再把日期按 `YYYYMMDD` 写入降序索引，温度作为原样文本值写入 MoonLSM。 [原始 CSV](https://github.com/WeiR-h/orderkey/blob/v0.0.8/examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv) · [NOAA 数据接口](https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094846,USW00024233,USW00094728&startDate=2024-01-01&endDate=2024-03-31&dataTypes=TMAX,TMIN&units=metric&format=csv) · [NCEI 开放数据政策](https://www.ncei.noaa.gov/sites/default/files/2023-12/NCEI%20PD-10-2-02%20-%20Open%20Data%20Policy%20Signed.pdf)
 
 对 `USW00094846` 查询日期范围 `[20240201, 20240301)`，两个引擎各返回 29 条，从 2024 年 2 月 29 日开始降序排列。复现使用项目内的原始文件。
 

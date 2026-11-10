@@ -11,3 +11,5 @@
 | [MoonLSM](https://mooncakes.io/docs/PingGuoMiaoMiao/moonlsm@0.3.2) / [MoonFST](https://mooncakes.io/docs/starAndHonor/fst@0.1.1) | 排序字节键到可变存储或可重载的只读索引 | 本项目的两个验证目标 |
 
 OrderKey 的差异是用显式字段身份与代次约束索引和游标，对冻结记录做重排重编码，再以 SQLite 独立核对重开后的索引。公开查重覆盖已索引的资料。
+
+封版前复查了 Flock 的 memcomparable 键与范围、MoonKV 分页、MigrationLens 的 PostgreSQL 离线审查。在本轮公开检索里，最接近的能力分别来自这些项目。v0.0.8 复验同类型字段交换、旧游标拒绝、离线重建及双引擎和 SQLite 的逐条结果。

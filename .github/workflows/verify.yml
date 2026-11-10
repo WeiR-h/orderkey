@@ -33,3 +33,9 @@ jobs:
       - run: python examples/moonlsm/verify_sqlite.py --baseline
       - run: python examples/moonlsm/verify_reindex.py --report reindex-report.json
       - run: moon package --list
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reindex-${{ matrix.os }}
+          path: reindex-report.json
+          if-no-files-found: ignore

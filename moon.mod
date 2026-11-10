@@ -1,10 +1,11 @@
 name = "WeiR-h/orderkey"
 
-version = "0.0.7"
+version = "0.0.8"
 
 readme = "README.md"
 
 license = "MIT"
+
 repository = "https://github.com/WeiR-h/orderkey"
 
 description = "Order-preserving compound keys and typed range bounds for ordered byte stores."
