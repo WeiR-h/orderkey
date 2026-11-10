@@ -28,16 +28,8 @@ fn payload_bytes(rows : Array[@moonlsm.KvPair]) -> Int32 {
 
 ///|
 fn run_demo(emit_fixture : Bool) -> Unit raise {
-  let spec = @orderkey.KeySpec::new([
-    BytesField(Asc),
-    BytesField(Asc),
-    Int64Field(Desc),
-    Int64Field(Asc),
-  ])
-  let storage = @moonlsm.MemStorage::new()
-  let writer = @moonlsm.Db::open(storage, MEMTABLE_LIMIT)
-  let layout_key = b"\x00orderkey-layout"
-  writer.put_deferred(layout_key, spec.layout()) |> ignore
+  let spec = fixture_spec()
+  let (storage, writer) = open_fixture(spec)
   let tenants = [
     b"t0", b"t1", b"t2", b"t3", b"t4", b"t5", b"t6", b"t7", b"t8", b"t9",
   ]
@@ -58,29 +50,15 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
           ])
           writer.put_deferred(key, b"reading") |> ignore
           if emit_fixture {
-            println(
-              "key,\{@hex.encode(tenant[:])},\{@hex.encode(device[:])},\{timestamp},\{sequence},\{@hex.encode(key[:])}",
-            )
+            emit_fixture_key(tenant, device, timestamp, sequence, key)
           }
           count += 1
         }
       }
     }
   }
-  writer.sync()
-  writer.flush()
-  writer.close()
-
-  let sst_files = storage.names().filter(name => name.has_suffix(".sst"))
-  assert_true(!sst_files.is_empty())
-  let db = @moonlsm.Db::open(storage, MEMTABLE_LIMIT)
-  match db.get(layout_key) {
-    Some(layout) => spec.require_layout(layout)
-    None => abort("missing OrderKey layout")
-  }
-
-  // Fixture keys begin with ASCII tenant bytes. The layout key lives below 01.
-  let full_scan = db.scan(b"\x01", b"\xff", count + 1)
+  let (db, sst_count) = reopen_fixture(storage, writer, spec)
+  let full_scan = scan_fixture(db, count)
   assert_eq(full_scan.length(), count)
   let filtered = []
   for row in full_scan {
@@ -196,10 +174,8 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
       println("fst,\{@hex.encode(key[:])}")
     }
   }
-  println("OrderKey 0.0.3 / MoonLSM 0.3.2")
-  println(
-    "fixture: \{count} records, \{sst_files.length()} SSTable files, reopened",
-  )
+  println("OrderKey 0.0.4 / MoonLSM 0.3.2")
+  println("fixture: \{count} records, SSTables=\{sst_count}, reopened")
   println("query: t3 / pump\\x00A / timestamp [-2, 4)")
   println(
     "full scan: \{full_scan.length()} rows, \{payload_bytes(full_scan)} payload bytes",
@@ -221,7 +197,15 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
 
 ///|
 fn main {
-  run_demo(@env.args().contains("--sqlite-fixture")) catch {
+  try {
+    let args = @env.args()
+    let count = args.length()
+    if count >= 2 && args[count - 2] == "--weather-fixture" {
+      run_weather(args[count - 1])
+    } else {
+      run_demo(args.contains("--sqlite-fixture"))
+    }
+  } catch {
     error => abort(error.to_string())
   }
 }

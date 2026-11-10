@@ -3,7 +3,9 @@ import {
   "PingGuoMiaoMiao/moonlsm",
   "starAndHonor/fst",
   "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
+  "moonbitlang/core/string",
 }
 
 pkgtype(kind: "executable")

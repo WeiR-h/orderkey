@@ -1,8 +1,8 @@
-# OrderKey 0.0.3
+# OrderKey 0.0.4
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
-小版本的交付与验证记录见 [CHANGELOG.md](CHANGELOG.md)。包版本与 v1 键格式是独立的。
+小版本的交付见 [CHANGELOG.md](CHANGELOG.md)，本版的本地验证见 [v0.0.4 验证记录](verification/2026-11-10-v0.0.4.md)。包版本与 v1 键格式是独立的。
 
 ## 复现
 
@@ -16,11 +16,13 @@ moon test --target js .
 moon run --target js examples/moonlsm
 ```
 
-可选的独立验证需要 Python 3.9+。脚本把 JS 和 Wasm GC 实际生成的键逐字节核对，再用 SQLite 比较多列排序、BLOB 排序和时间区间查询结果。
+可选的独立验证需要 Python 3.9+。脚本对合成数据和项目内的 NOAA 原始观测各运行一次双引擎验证，把 JS 和 Wasm GC 的键逐字节核对，再用 SQLite 比较多列排序、BLOB 排序和时间区间结果。
 
 ```sh
 python examples/moonlsm/verify_sqlite.py
 ```
+
+在有本地 `v0.0.1` Git 标签的工作区，可以加 `--baseline` 从干净目录重新编译早期版本，并核对两个版本的键字节。
 
 核心库只依赖 MoonBit 标准库。工作区的演示使用 [MoonLSM 0.3.2](https://mooncakes.io/docs/PingGuoMiaoMiao/moonlsm%400.3.2) 和 [MoonFST 0.1.1](https://mooncakes.io/docs/starAndHonor/fst%400.1.1)。
 
@@ -81,5 +83,11 @@ fn make_query() -> (Bytes, @orderkey.ByteRange) raise @orderkey.KeyError {
 三条路径最终得到相同的 18 行。游标分为 5、5、5、3 条，拼接结果与单次查询一致。示例的 MoonLSM 适配代码使用有限的上界，核心库同时支持上界无穷。
 
 MoonFST 快照只包含键和记录序号，真实键值内容仍由 MoonLSM 返回。SQLite 独立核对两个引擎的返回键和顺序。
+
+## 公开数据样本
+
+样本来自 NOAA NCEI 的 GHCNd Daily Summaries。原始 CSV 包含三个美国测站在 2024 年第一季度的 273 条观测，保留 `STATION`、`DATE`、`TMAX`、`TMIN` 四列。脚本先检查原始字节的 SHA-256，再把日期按 `YYYYMMDD` 写入降序索引，温度作为原样文本值写入 MoonLSM。 [原始 CSV](examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv) · [NOAA 数据接口](https://www.ncei.noaa.gov/access/services/data/v1?dataset=daily-summaries&stations=USW00094846,USW00024233,USW00094728&startDate=2024-01-01&endDate=2024-03-31&dataTypes=TMAX,TMIN&units=metric&format=csv) · [NCEI 开放数据政策](https://www.ncei.noaa.gov/sites/default/files/2023-12/NCEI%20PD-10-2-02%20-%20Open%20Data%20Policy%20Signed.pdf)
+
+对 `USW00094846` 查询日期范围 `[20240201, 20240301)`，两个引擎各返回 29 条，从 2024 年 2 月 29 日开始降序排列。复现使用项目内的原始文件。
 
 设计参考可比较键的公开先例 [FoundationDB Tuple Layer](https://apple.github.io/foundationdb/data-modeling.html) 和 [Google orderedcode](https://pkg.go.dev/github.com/google/orderedcode)。OrderKey 使用上表中的 v1 字节格式。
