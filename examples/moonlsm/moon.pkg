@@ -1,6 +1,7 @@
 import {
   "orderkey/orderkey",
   "PingGuoMiaoMiao/moonlsm",
+  "starAndHonor/fst",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/env",
 }

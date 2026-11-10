@@ -1,4 +1,4 @@
-# OrderKey 0.0.2
+# OrderKey 0.0.3
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
@@ -22,7 +22,7 @@ moon run --target js examples/moonlsm
 python examples/moonlsm/verify_sqlite.py
 ```
 
-核心库只依赖 MoonBit 标准库。工作区的演示依赖 Mooncakes 上的 [MoonLSM 0.3.2](https://mooncakes.io/docs/PingGuoMiaoMiao/moonlsm%400.3.2)。
+核心库只依赖 MoonBit 标准库。工作区的演示使用 [MoonLSM 0.3.2](https://mooncakes.io/docs/PingGuoMiaoMiao/moonlsm%400.3.2) 和 [MoonFST 0.1.1](https://mooncakes.io/docs/starAndHonor/fst%400.1.1)。
 
 ## 使用示例
 
@@ -62,13 +62,14 @@ fn make_query() -> (Bytes, @orderkey.ByteRange) raise @orderkey.KeyError {
 
 布局描述符以 `4F 4B 01` 开头，随后每个字段占一个字节。字节串升序为 `10`，字节串降序为 `11`，整数升序为 `20`，整数降序为 `21`。描述符存到索引的元数据位置，原有数据键沿用 v1 编码。
 
-## MoonLSM 演示
+## 双引擎演示
 
 示例写入 9,840 条模拟设备读数，刷新 SSTable 后重新打开数据库。固定查询跨越负数和零，同一时间戳包含三条记录。
 
 - 比较全扫后过滤、手写正确字节边界和 OrderKey 生成边界的逐条结果。
 - 对同一查询做游标分页，并与单次范围查询核对顺序与记录数量。
 - 重新打开后检查持久化布局，再用时间戳和序号共同限定区间，验证边界可以切开同一时间戳的记录。
+- 将相同键和原始行的序号构建成 MoonFST 只读索引，序列化并重新载入。按设备取前缀、复合区间和游标续读的结果都与 MoonLSM 对照。
 - 统计扫描返回给调用方的行数，以及键和值的字节总数。示例用 MoonLSM 自带的内存存储，SSTable 在打开时载入。返回的数据量和物理磁盘读取量是两个指标。
 
 | 扫描路径 | 引擎返回行数 | 返回的键和值 |
@@ -78,5 +79,7 @@ fn make_query() -> (Bytes, @orderkey.ByteRange) raise @orderkey.KeyError {
 | OrderKey 生成边界 | 18 | 648 字节 |
 
 三条路径最终得到相同的 18 行。游标分为 5、5、5、3 条，拼接结果与单次查询一致。示例的 MoonLSM 适配代码使用有限的上界，核心库同时支持上界无穷。
+
+MoonFST 快照只包含键和记录序号，真实键值内容仍由 MoonLSM 返回。SQLite 独立核对两个引擎的返回键和顺序。
 
 设计参考可比较键的公开先例 [FoundationDB Tuple Layer](https://apple.github.io/foundationdb/data-modeling.html) 和 [Google orderedcode](https://pkg.go.dev/github.com/google/orderedcode)。OrderKey 使用上表中的 v1 字节格式。

@@ -21,6 +21,7 @@ def read_fixture(target):
         raise RuntimeError(result.stderr or result.stdout)
     rows = []
     matches = []
+    snapshot_matches = []
     for line in result.stdout.splitlines():
         if line.startswith("key,"):
             _, tenant, device, timestamp, sequence, key = line.split(",")
@@ -35,12 +36,17 @@ def read_fixture(target):
             )
         elif line.startswith("match,"):
             matches.append(bytes.fromhex(line.removeprefix("match,")))
-    if len(rows) != 9840 or len(matches) != 18:
-        raise AssertionError(f"{target} emitted {len(rows)} keys and {len(matches)} matches")
-    return rows, matches
+        elif line.startswith("fst,"):
+            snapshot_matches.append(bytes.fromhex(line.removeprefix("fst,")))
+    if len(rows) != 9840 or len(matches) != 18 or len(snapshot_matches) != 18:
+        raise AssertionError(
+            f"{target} emitted {len(rows)} keys, {len(matches)} MoonLSM matches, "
+            f"and {len(snapshot_matches)} MoonFST matches"
+        )
+    return rows, matches, snapshot_matches
 
 
-def verify_order(rows, matches):
+def verify_order(rows, matches, snapshot_matches):
     with closing(sqlite3.connect(":memory:")) as database:
         database.execute(
             "CREATE TABLE events(tenant BLOB, device BLOB, timestamp INTEGER, "
@@ -62,6 +68,8 @@ def verify_order(rows, matches):
         raise AssertionError("SQLite tuple order differs from encoded BLOB order")
     if [(key,) for key in matches] != expected_matches:
         raise AssertionError("MoonLSM results differ from SQLite's typed range query")
+    if [(key,) for key in snapshot_matches] != expected_matches:
+        raise AssertionError("MoonFST results differ from SQLite's typed range query")
 
 
 def main():
@@ -70,7 +78,7 @@ def main():
     if js != wasm_gc:
         raise AssertionError("JS and Wasm GC emitted different key or result bytes")
     verify_order(*js)
-    print("SQLite verified 9840 keys and 18 matches. JS and Wasm GC bytes agree.")
+    print("SQLite verified 9840 keys and 18 matches per engine. JS and Wasm GC bytes agree.")
 
 
 if __name__ == "__main__":

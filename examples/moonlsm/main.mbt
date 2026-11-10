@@ -160,14 +160,43 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
   }
   assert_eq(paged, indexed_pairs)
   assert_eq(page_sizes, [5, 5, 5, 3])
+
+  let (snapshot, snapshot_bytes) = build_snapshot(full_scan)
+  assert_eq(snapshot.len(), count.to_uint64())
+  let snapshot_rows = scan_snapshot(snapshot, range, count + 1)
+  let snapshot_keys = snapshot_rows.map(row => row.key)
+  assert_eq(snapshot_keys, indexed.map(row => row.key))
+  for row in snapshot_rows {
+    assert_eq(full_scan[row.value.to_int()].key, row.key)
+  }
+  assert_eq(
+    scan_snapshot(snapshot, tuple_range, count + 1).map(row => row.key),
+    tuple_rows.map(row => row.key),
+  )
+  let prefix_range = spec.prefix_range([Binary(b"t3"), Binary(b"pump\x00A")])
+  let prefix_rows = scan_range(db, prefix_range, count + 1)
+  assert_eq(prefix_rows.length(), 123)
+  assert_eq(
+    scan_snapshot(snapshot, prefix_range, count + 1).map(row => row.key),
+    prefix_rows.map(row => row.key),
+  )
+  let snapshot_page = scan_snapshot(snapshot, range, PAGE_SIZE)
+  let next_window = spec.resume_after(range, snapshot_page[PAGE_SIZE - 1].key)
+  let rest = scan_snapshot(snapshot, next_window, count + 1)
+  let combined = snapshot_page.map(row => row.key)
+  combined.append(rest.map(row => row.key))
+  assert_eq(combined, snapshot_keys)
   db.close()
 
   if emit_fixture {
     for row in indexed {
       println("match,\{@hex.encode(row.key[:])}")
     }
+    for key in snapshot_keys {
+      println("fst,\{@hex.encode(key[:])}")
+    }
   }
-  println("OrderKey 0.0.2 / MoonLSM 0.3.2")
+  println("OrderKey 0.0.3 / MoonLSM 0.3.2")
   println(
     "fixture: \{count} records, \{sst_files.length()} SSTable files, reopened",
   )
@@ -184,6 +213,9 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
   println("verified: identical results, pages 5 / 5 / 5 / 3")
   println(
     "layout verified on reopen, tuple range returned \{tuple_rows.length()} rows",
+  )
+  println(
+    "MoonFST 0.1.1: \{snapshot.len()} keys, \{snapshot_bytes} serialized bytes, identical range and cursor results",
   )
 }
 
