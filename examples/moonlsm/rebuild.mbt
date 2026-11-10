@@ -95,6 +95,55 @@ fn emit_reindexed(
 }
 
 ///|
+fn validate_rebuilt_snapshot(
+  rows : Array[@moonlsm.KvPair],
+  matches : Array[@moonlsm.KvPair],
+  target : @orderkey.IndexContract,
+  range : @orderkey.ByteRange,
+) -> Unit raise {
+  let (snapshot, image_bytes) = build_snapshot(rows)
+  assert_eq(snapshot.len(), rows.length().to_uint64())
+  let stream = snapshot.stream()
+  let entries = stream.take(rows.length() + 1)
+  stream.close()
+  assert_eq(entries.length(), rows.length())
+  for index, entry in entries {
+    assert_eq(entry.value, index.to_uint64())
+    assert_eq(entry.key, rows[index].key)
+  }
+  let whole_range = scan_snapshot(snapshot, range, rows.length() + 1)
+  assert_eq(
+    whole_range.map(fn(entry) { entry.key }),
+    matches.map(fn(row) { row.key }),
+  )
+  let paged = []
+  let mut window = range
+  while true {
+    let page = scan_snapshot(snapshot, window, PAGE_SIZE)
+    paged.append(page)
+    if page.length() < PAGE_SIZE {
+      break
+    }
+    let token = target.issue_cursor(
+      b"fst-2",
+      range,
+      page[page.length() - 1].key,
+    )
+    window = target.resume_cursor(b"fst-2", range, token)
+  }
+  assert_eq(
+    paged.map(fn(entry) { (entry.key, entry.value) }),
+    whole_range.map(fn(entry) { (entry.key, entry.value) }),
+  )
+  println("snapshot-bytes,\{image_bytes}")
+  println("checks,fst-reloaded,fst-ordinals,fst-pages")
+  for entry in paged {
+    let row = rows[entry.value.to_int()]
+    println("fst,\{@hex.encode(entry.key[:])},\{@hex.encode(row.value[:])}")
+  }
+}
+
+///|
 fn run_reindex(
   source_db : @moonlsm.Db[@moonlsm.MemStorage],
   source_rows : Array[@moonlsm.KvPair],
@@ -207,6 +256,7 @@ fn run_reindex(
     matches.map(fn(row) { (row.key, row.value) }),
   )
   println("checks,moonlsm-pages")
+  validate_rebuilt_snapshot(rows, matches, target, range)
   let source_contract = source.to_bytes()
   let target_contract = target.to_bytes()
   println(

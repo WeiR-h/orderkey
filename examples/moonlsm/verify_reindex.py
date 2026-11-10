@@ -36,9 +36,10 @@ def inputs(weather):
 
 
 def read_rows(target, arguments):
-    result = {name: [] for name in ("source-before", "source-after", "target", "match")}
+    result = {name: [] for name in ("source-before", "source-after", "target", "match", "fst")}
     checks = set()
     contracts = None
+    snapshot_bytes = None
     for line in run_fixture(target, arguments):
         tag, *fields = line.split(",")
         if tag == "target":
@@ -52,11 +53,15 @@ def read_rows(target, arguments):
             result[tag].append((bytes.fromhex(key), bytes.fromhex(payload)))
         elif tag == "checks":
             checks.update(fields)
+        elif tag == "snapshot-bytes":
+            if snapshot_bytes is not None or len(fields) != 1:
+                raise ValueError("expected one snapshot size")
+            snapshot_bytes = int(fields[0])
         elif tag == "contracts":
             if contracts is not None or len(fields) != 2:
                 raise ValueError("expected one source and target contract")
             contracts = dict(zip(("source", "target"), fields, strict=True))
-    return result, sorted(checks), contracts
+    return result, sorted(checks), contracts, snapshot_bytes
 
 
 def describe(value):
@@ -86,16 +91,17 @@ def digest(rows):
 
 def verify_case(weather):
     arguments, source, query, match_count = inputs(weather)
-    rows, checks, contracts = read_rows("js", arguments)
-    other_rows, other_checks, other_contracts = read_rows("wasm-gc", arguments)
-    if checks != other_checks or contracts != other_contracts:
+    rows, checks, contracts, snapshot_bytes = read_rows("js", arguments)
+    other_rows, other_checks, other_contracts, other_size = read_rows("wasm-gc", arguments)
+    if checks != other_checks or contracts != other_contracts or snapshot_bytes != other_size:
         raise ValueError("JS and Wasm GC checks or contracts differ")
     for kind in rows:
         compare(f"JS versus Wasm GC {kind}", other_rows[kind], rows[kind])
-    required = {"stale-cursor", "bad-key", "duplicate-target", "write-failure", "moonlsm-pages"}
+    required = {"stale-cursor", "bad-key", "duplicate-target", "write-failure", "moonlsm-pages",
+                "fst-reloaded", "fst-ordinals", "fst-pages"}
     if not weather:
         required.update(("legacy-accepted", "wrong-prefix-empty", "contract-rejected"))
-    if not required.issubset(checks) or contracts is None:
+    if not required.issubset(checks) or contracts is None or not snapshot_bytes:
         raise ValueError("required checks or contracts are missing")
     compare("unchanged source", rows["source-after"], rows["source-before"])
     if len(rows["source-before"]) != len(source):
@@ -118,7 +124,9 @@ def verify_case(weather):
     if duplicates or keys != sorted(keys):
         raise ValueError(f"target byte order or uniqueness failed, duplicates={duplicates}")
     by_row = {row[:5]: (row[5], row[4]) for row in target_rows}
-    compare("MoonLSM range", rows["match"], [by_row[row] for row in expected_matches])
+    expected_range = [by_row[row] for row in expected_matches]
+    compare("MoonLSM range", rows["match"], expected_range)
+    compare("MoonFST range", rows["fst"], expected_range)
     return {
         "fixture": "NOAA GHCNd" if weather else "synthetic telemetry",
         "contracts_hex": contracts,
@@ -130,6 +138,8 @@ def verify_case(weather):
         "source_after_sha256": digest(rows["source-after"]),
         "target_sha256": digest([(row[5], row[4]) for row in target_rows]),
         "range_sha256": digest(rows["match"]),
+        "fst_range_sha256": digest(rows["fst"]),
+        "snapshot_bytes": snapshot_bytes,
         "checks": checks,
     }
 
@@ -167,7 +177,7 @@ def main():
         write_report(args.report, report)
     if not report["ready"]:
         parser.exit(1, f"{report['first_difference']}\n")
-    print("Verified replacement indexes on JS and Wasm GC.")
+    print("MoonLSM and reloaded MoonFST agree with SQLite on JS and Wasm GC.")
 
 
 if __name__ == "__main__":
