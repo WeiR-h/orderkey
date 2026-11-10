@@ -12,6 +12,8 @@ import {
 pub suberror ContractError {
   InvalidContract
   ContractMismatch
+  InvalidCursor
+  CursorScopeMismatch
 }
 pub fn ContractError::to_repr(Self) -> @debug.Repr
 
@@ -63,9 +65,11 @@ pub struct IndexContract {
   // private fields
 }
 pub fn IndexContract::from_bytes(Bytes) -> Self raise ContractError
+pub fn IndexContract::issue_cursor(Self, Bytes, ByteRange, Bytes) -> Bytes raise
 pub fn IndexContract::key_spec(Self) -> KeySpec
 pub fn IndexContract::new(Bytes, UInt64, Array[(Bytes, Field)]) -> Self raise ContractError
 pub fn IndexContract::require_same(Self, Bytes) -> Unit raise ContractError
+pub fn IndexContract::resume_cursor(Self, Bytes, ByteRange, Bytes) -> ByteRange raise
 pub fn IndexContract::to_bytes(Self) -> Bytes
 
 pub struct KeySpec {
