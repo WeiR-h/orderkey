@@ -34,6 +34,14 @@ pub suberror KeyError {
 }
 pub fn KeyError::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
+pub suberror ReindexError {
+  DifferentIndex
+  InvalidGeneration
+  IncompatibleFields
+}
+pub fn ReindexError::to_repr(Self) -> @debug.Repr
+
 // Types and methods
 pub(all) enum Bound {
   Unbounded
@@ -85,6 +93,12 @@ pub fn KeySpec::prefix_range(Self, Array[Value]) -> ByteRange raise KeyError
 pub fn KeySpec::require_layout(Self, Bytes) -> Unit raise KeyError
 pub fn KeySpec::resume_after(Self, ByteRange, Bytes) -> ByteRange raise KeyError
 pub fn KeySpec::tuple_range(Self, Array[Value], TupleBound, TupleBound) -> ByteRange raise KeyError
+
+pub struct ReindexPlan {
+  // private fields
+}
+pub fn ReindexPlan::new(IndexContract, IndexContract) -> Self raise ReindexError
+pub fn ReindexPlan::rekey(Self, Bytes) -> Bytes raise KeyError
 
 pub(all) enum TupleBound {
   TupleUnbounded
