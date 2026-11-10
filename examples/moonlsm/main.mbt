@@ -27,7 +27,7 @@ fn payload_bytes(rows : Array[@moonlsm.KvPair]) -> Int32 {
 }
 
 ///|
-fn run_demo(emit_fixture : Bool) -> Unit raise {
+fn run_demo(emit_fixture : Bool, reindex : Bool) -> Unit raise {
   let spec = fixture_spec()
   let (storage, writer) = open_fixture(spec)
   let tenants = [
@@ -60,6 +60,11 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
   let (db, sst_count) = reopen_fixture(storage, writer, spec)
   let full_scan = scan_fixture(db, count)
   assert_eq(full_scan.length(), count)
+  if reindex {
+    run_reindex(db, full_scan, false)
+    db.close()
+    return
+  }
   let filtered = []
   for row in full_scan {
     match spec.decode(row.key) {
@@ -200,10 +205,12 @@ fn main {
   try {
     let args = @env.args()
     let count = args.length()
-    if count >= 2 && args[count - 2] == "--weather-fixture" {
-      run_weather(args[count - 1])
+    if count >= 2 && args[count - 2] == "--weather-reindex" {
+      run_weather(args[count - 1], true)
+    } else if count >= 2 && args[count - 2] == "--weather-fixture" {
+      run_weather(args[count - 1], false)
     } else {
-      run_demo(args.contains("--sqlite-fixture"))
+      run_demo(args.contains("--sqlite-fixture"), args.contains("--reindex"))
     }
   } catch {
     error => abort(error.to_string())

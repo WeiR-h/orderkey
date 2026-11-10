@@ -1,6 +1,6 @@
 ///|
 /// The verification script checks and packs the tracked NOAA CSV for both targets.
-fn run_weather(packed : String) -> Unit raise {
+fn run_weather(packed : String, reindex : Bool) -> Unit raise {
   let spec = fixture_spec()
   let (storage, writer) = open_fixture(spec)
   let mut count = 0
@@ -27,6 +27,11 @@ fn run_weather(packed : String) -> Unit raise {
   let (db, _) = reopen_fixture(storage, writer, spec)
   let all_rows = scan_fixture(db, count)
   assert_eq(all_rows.length(), count)
+  if reindex {
+    run_reindex(db, all_rows, true)
+    db.close()
+    return
+  }
   let february = spec.field_range(
     [Binary(b"ghcnd"), Binary(b"USW00094846")],
     Inclusive(Signed(20240201L)),
