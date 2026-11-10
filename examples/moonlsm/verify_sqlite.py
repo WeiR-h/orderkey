@@ -110,26 +110,35 @@ def weather_fixture():
     return ";".join(packed), values
 
 
-def verify_baseline(current):
+def read_tag_fixture(tag, arguments, counts):
     archive = subprocess.run(
-        ["git", "archive", "--format=zip", "v0.0.1"],
+        ["git", "archive", "--format=zip", tag],
         cwd=PROJECT,
         capture_output=True,
         check=True,
     ).stdout
     temp_root = Path(tempfile.gettempdir()).resolve()
-    with tempfile.TemporaryDirectory(prefix="orderkey-v001-", dir=temp_root) as temp:
+    with tempfile.TemporaryDirectory(prefix=f"orderkey-{tag}-", dir=temp_root) as temp:
         baseline_root = Path(temp).resolve()
         if baseline_root.parent != temp_root:
             raise RuntimeError("unexpected baseline directory")
         with zipfile.ZipFile(io.BytesIO(archive)) as zipped:
             zipped.extractall(baseline_root)
-        baseline = read_fixture(
-            "js", ["--sqlite-fixture"], (9840, 18, 0), project=baseline_root
-        )
-    if baseline[:2] != current[:2]:
-        raise AssertionError("v0.0.1 and the current version emitted different keys")
-    print("Compatibility: 9840 encoded keys and 18 MoonLSM results match v0.0.1 byte for byte.")
+        return read_fixture("js", arguments, counts, project=baseline_root)
+
+
+def verify_weather_baseline(weather, current):
+    baseline = read_tag_fixture("v0.0.4", ["--weather-fixture", weather], (273, 29, 29))
+    if baseline != current:
+        raise AssertionError("NOAA keys or results differ from v0.0.4")
+    print("Compatibility: NOAA keys and results match v0.0.4 byte for byte.")
+
+
+def verify_baseline(current, tag, fst_count):
+    baseline = read_tag_fixture(tag, ["--sqlite-fixture"], (9840, 18, fst_count))
+    if baseline[:2] != current[:2] or (fst_count and baseline[2] != current[2]):
+        raise AssertionError(f"{tag} and the current version emitted different keys or results")
+    print(f"Compatibility: 9840 encoded keys and 18 MoonLSM results match {tag} byte for byte.")
 
 
 def main():
@@ -137,7 +146,7 @@ def main():
     parser.add_argument(
         "--baseline",
         action="store_true",
-        help="rebuild the v0.0.1 Git tag and compare the emitted synthetic keys",
+        help="rebuild the v0.0.1 and v0.0.4 Git tags and compare the emitted keys",
     )
     arguments = parser.parse_args()
     synthetic = verify_case(
@@ -147,7 +156,7 @@ def main():
         (b"t3", b"pump\x00A", -2, 4),
     )
     weather, values = weather_fixture()
-    verify_case(
+    weather_result = verify_case(
         "NOAA GHCNd",
         ["--weather-fixture", weather],
         (273, 29, 29),
@@ -155,7 +164,9 @@ def main():
         values,
     )
     if arguments.baseline:
-        verify_baseline(synthetic)
+        verify_baseline(synthetic, "v0.0.1", 0)
+        verify_baseline(synthetic, "v0.0.4", 18)
+        verify_weather_baseline(weather, weather_result)
 
 
 if __name__ == "__main__":

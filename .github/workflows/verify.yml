@@ -1,0 +1,34 @@
+name: Verify OrderKey
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: hustcer/setup-moonbit@v1.22
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: moon version --all
+      - run: moon update
+      - run: moon test --deny-warn --target wasm .
+      - run: moon test --deny-warn --target wasm-gc .
+      - run: moon test --deny-warn --target js .
+      - run: python examples/moonlsm/verify_sqlite.py --baseline
+      - run: moon package --list
