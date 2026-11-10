@@ -1,0 +1,72 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "orderkey/orderkey"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+#derive(@debug.Debug)
+pub suberror KeyError {
+  EmptySpec
+  WrongArity(Int32, Int32)
+  InvalidPrefixLength(Int32)
+  TypeMismatch(Int32)
+  TruncatedKey(Int32)
+  InvalidEscape(Int32)
+  TrailingBytes(Int32)
+  CursorOutsideRange
+}
+pub fn KeyError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub(all) enum Bound {
+  Unbounded
+  Inclusive(Value)
+  Exclusive(Value)
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ByteRange {
+  Empty
+  Span(Bytes, Bytes?)
+}
+pub fn ByteRange::contains(Self, Bytes) -> Bool
+pub fn ByteRange::equal(Self, Self) -> Bool
+pub fn ByteRange::not_equal(Self, Self) -> Bool
+pub fn ByteRange::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Direction {
+  Asc
+  Desc
+}
+
+pub(all) enum Field {
+  BytesField(Direction)
+  Int64Field(Direction)
+}
+
+pub struct KeySpec {
+  // private fields
+}
+pub fn KeySpec::decode(Self, Bytes) -> Array[Value] raise KeyError
+pub fn KeySpec::encode(Self, Array[Value]) -> Bytes raise KeyError
+pub fn KeySpec::field_range(Self, Array[Value], Bound, Bound) -> ByteRange raise KeyError
+pub fn KeySpec::new(Array[Field]) -> Self raise KeyError
+pub fn KeySpec::prefix_range(Self, Array[Value]) -> ByteRange raise KeyError
+pub fn KeySpec::resume_after(Self, ByteRange, Bytes) -> ByteRange raise KeyError
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Value {
+  Binary(Bytes)
+  Signed(Int64)
+}
+pub fn Value::equal(Self, Self) -> Bool
+pub fn Value::not_equal(Self, Self) -> Bool
+pub fn Value::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

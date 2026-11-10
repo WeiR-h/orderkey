@@ -1,0 +1,8 @@
+import {
+  "orderkey/orderkey",
+  "PingGuoMiaoMiao/moonlsm",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")
