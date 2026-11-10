@@ -1,4 +1,4 @@
-# OrderKey 0.0.4
+# OrderKey
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
@@ -28,7 +28,13 @@ python examples/moonlsm/verify_sqlite.py
 
 ## 使用示例
 
-在调用方的 `moon.pkg` 中导入 `"orderkey/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。
+从 Mooncakes 安装当前公开版本。
+
+```sh
+moon add WeiR-h/orderkey
+```
+
+在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。
 
 ```moonbit
 fn make_query() -> (Bytes, @orderkey.ByteRange) raise @orderkey.KeyError {

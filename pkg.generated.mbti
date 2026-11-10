@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "orderkey/orderkey"
+package "WeiR-h/orderkey"
 
 import {
   "moonbitlang/core/debug",

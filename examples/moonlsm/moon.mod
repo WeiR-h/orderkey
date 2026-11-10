@@ -1,13 +1,13 @@
 name = "orderkey/moonlsm_demo"
 
-version = "0.0.4"
+version = "0.0.5"
 
 license = "MIT"
 
 preferred_target = "js"
 
 import {
-  "orderkey/orderkey@0.0.4",
+  "WeiR-h/orderkey@0.0.5",
   "PingGuoMiaoMiao/moonlsm@0.3.2",
   "starAndHonor/fst@0.1.1",
 }

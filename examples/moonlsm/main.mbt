@@ -174,7 +174,7 @@ fn run_demo(emit_fixture : Bool) -> Unit raise {
       println("fst,\{@hex.encode(key[:])}")
     }
   }
-  println("OrderKey 0.0.4 / MoonLSM 0.3.2")
+  println("OrderKey / MoonLSM 0.3.2")
   println("fixture: \{count} records, SSTables=\{sst_count}, reopened")
   println("query: t3 / pump\\x00A / timestamp [-2, 4)")
   println(
