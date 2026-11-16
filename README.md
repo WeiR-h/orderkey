@@ -2,7 +2,7 @@
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
-小版本的交付见 [CHANGELOG.md](CHANGELOG.md)，本版的本地验证见 [v0.0.4 验证记录](verification/2026-11-10-v0.0.4.md)。包版本与 v1 键格式是独立的。
+小版本的交付见 [CHANGELOG.md](CHANGELOG.md)，历史基线见 [v0.0.4 验证记录](verification/2026-11-10-v0.0.4.md)，当前复验报告随 [v0.0.12 发布](https://github.com/WeiR-h/orderkey/releases/tag/v0.0.12) 提供。包版本与 v1 键格式是独立的。
 
 ## 复现
 
