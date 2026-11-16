@@ -1,0 +1,20 @@
+import {
+  "WeiR-h/orderkey",
+  "PingGuoMiaoMiao/moonlsm",
+  "starAndHonor/fst",
+  "gmlewis/sha256",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/core/buffer",
+}
+
+pkgtype(kind: "executable")
+
+options(
+  "allow-experimental-packages": [ "moonbitlang/core/async/fs" ],
+)

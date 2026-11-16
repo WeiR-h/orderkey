@@ -1,0 +1,16 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "WeiR-h/orderkey_cli"
+
+// Values
+
+// Errors
+type CliError
+
+// Types and methods
+type Input
+
+type Row
+
+// Type aliases
+
+// Traits
