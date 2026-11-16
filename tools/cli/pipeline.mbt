@@ -64,8 +64,12 @@ fn same_rows(actual : Array[Row], expected : Array[Row]) -> Unit raise {
 }
 
 ///|
-fn database_rows(dir : String, count : Int32) -> Array[Row] raise {
-  let storage = @moonlsm.NativeStorage::new(dir)
+async fn database_rows(dir : String, count : Int32) -> Array[Row] {
+  let absolute = @fs.realpath(dir)
+  let previous = @fs.realpath(".")
+  enter_directory(absolute)
+  defer enter_directory(previous)
+  let storage = @moonlsm.NativeStorage::new(".")
   defer storage.close()
   let db = @moonlsm.Db::open(storage, 1048576)
   defer db.close()
@@ -75,15 +79,32 @@ fn database_rows(dir : String, count : Int32) -> Array[Row] raise {
 }
 
 ///|
-async fn build_database(dir : String, input : Input) -> Unit {
+async fn build_database(
+  dir : String,
+  input : Input,
+  args : Array[String],
+) -> Unit {
   @fs.mkdir(dir)
-  let storage = @moonlsm.NativeStorage::new(dir)
+  let absolute = @fs.realpath(dir)
+  let previous = @fs.realpath(".")
+  enter_directory(absolute)
+  defer enter_directory(previous)
+  let storage = @moonlsm.NativeStorage::new(".")
   defer storage.close()
   let db = @moonlsm.Db::open(storage, 1048576)
   defer db.close()
   let plan = @orderkey.ReindexPlan::new(input.source, input.target)
-  for row in input.rows {
+  for index, row in input.rows {
+    if index == 1024 {
+      inject(args, "writing")
+    }
     db.put_deferred(prefixed(plan.rekey(row.key)), row.value) |> ignore
+  }
+  match option(args, "--fail-io") {
+    "write" => storage.write_file("missing-parent/blocked", b"")
+    "sync" => storage.sync_file("missing-sync-file")
+    "" => ()
+    _ => invalid("unknown I/O failure mode")
   }
   db.sync()
   db.flush()
@@ -177,7 +198,18 @@ async fn finish(dir : String, input : Input) -> Unit {
     ("build_commit", Json::string(build_commit)),
     ("fingerprint", Json::string(input.fingerprint)),
     ("source_sha256", Json::string(hash(input.raw))),
-    ("snapshot_id", Json::string(hash(read(dir + "/target.fst")))),
+    (
+      "snapshot_id",
+      Json::string(
+        hash(
+          @utf8.encode(
+            input.fingerprint +
+            hash(read(dir + "/target.fst")) +
+            hash(read(dir + "/records.jsonl")),
+          ),
+        ),
+      ),
+    ),
     ("rows", Json::number(input.rows.length().to_double())),
     ("files", file_manifest(dir)),
   ])
@@ -208,4 +240,98 @@ async fn require_ready(dir : String) -> Json {
   }
   check_hashes(dir, manifest)
   manifest
+}
+
+///|
+fn inject(args : Array[String], phase : String) -> Unit raise {
+  if option(args, "--fail-after") == phase {
+    invalid("injected failure after " + phase)
+  }
+  if option(args, "--pause-after") == phase {
+    println("paused " + phase)
+    @moonlsm.flush_stdio()
+    pause_process(30000)
+  }
+}
+
+///|
+extern "C" fn pause_process(ms : Int32) -> Unit = "orderkey_pause"
+
+///|
+async fn checkpoint_files(dir : String, full : Bool) -> Json {
+  if full {
+    return file_manifest(dir)
+  }
+  let entries = []
+  for name in regular_files(dir + "/db") {
+    entries.push(("db/" + name, Json::string(hash(read(dir + "/db/" + name)))))
+  }
+  object(entries)
+}
+
+///|
+async fn resume_stages(
+  dir : String,
+  input : Input,
+  args : Array[String],
+) -> Unit {
+  let checkpoint = dir + "/checkpoint.json"
+  let mut phase = ""
+  if @fs.exists(checkpoint) {
+    let saved = json_file(checkpoint)
+    if text(field(saved, "fingerprint")) != input.fingerprint {
+      invalid("checkpoint identity differs")
+    }
+    phase = text(field(saved, "phase"))
+    if !["database", "snapshot", "verified"].contains(phase) {
+      invalid("unknown checkpoint stage")
+    }
+    if checkpoint_files(dir, phase != "database") != field(saved, "files") {
+      invalid("checkpoint file digest differs")
+    }
+  }
+  if phase == "" {
+    // Each interrupted database attempt is kept, so restarting never recursively
+    // deletes a caller's files.
+    if @fs.exists(dir + "/db") {
+      let mut n = 0
+      while @fs.exists(dir + "/abandoned-db-" + n.to_string()) {
+        n += 1
+      }
+      @fs.rename(dir + "/db", dir + "/abandoned-db-" + n.to_string())
+    }
+    build_database(dir + "/db", input, args)
+    atomic_json(
+      checkpoint,
+      object([
+        ("phase", Json::string("database")),
+        ("fingerprint", Json::string(input.fingerprint)),
+        ("files", checkpoint_files(dir, false)),
+      ]),
+    )
+    phase = "database"
+    inject(args, "database")
+  }
+  if phase == "database" {
+    snapshot(dir, input)
+    atomic_json(
+      checkpoint,
+      object([
+        ("phase", Json::string("snapshot")),
+        ("fingerprint", Json::string(input.fingerprint)),
+        ("files", checkpoint_files(dir, true)),
+      ]),
+    )
+    inject(args, "snapshot")
+  }
+  verify_contents(dir, input)
+  atomic_json(
+    checkpoint,
+    object([
+      ("phase", Json::string("verified")),
+      ("fingerprint", Json::string(input.fingerprint)),
+      ("files", checkpoint_files(dir, true)),
+    ]),
+  )
+  inject(args, "verified")
 }

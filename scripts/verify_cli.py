@@ -115,13 +115,94 @@ def verify(exe, base, weather=False):
             "elapsed_seconds":elapsed,"disk_bytes":sum(p.stat().st_size for p in out.rglob("*") if p.is_file()),
             "fst_bytes":(out/"target.fst").stat().st_size}
 
+def failure_checks(exe, root):
+    rows = dataset(False)[:2050]
+    cases = []
+    for phase in ("writing","database","snapshot","verified","complete"):
+        base=root/("fail-"+phase)
+        args=write_case(base, rows)
+        run(exe,"build",args+["--fail-after",phase],success=False)
+        out=base/"candidate"
+        assert json.loads((out/"report.json").read_text())["ready"] is False
+        run(exe,"query",["--out",str(out)],success=False)
+        run(exe,"resume",["--out",str(out)])
+        run(exe,"verify",["--out",str(out)])
+        cases.append(phase)
+    for mode in ("write","sync"):
+        base=root/("io-"+mode)
+        args=write_case(base,rows)
+        run(exe,"build",args+["--fail-io",mode],success=False)
+        assert json.loads((base/"candidate/report.json").read_text())["ready"] is False
+        run(exe,"resume",["--out",str(base/"candidate")])
+        cases.append("io-"+mode)
+    # Kill the actual process while it owns the lock and has partially written
+    # the database. Restarting must rebuild this whole stage.
+    base=root/"kill"
+    args=write_case(base,rows)
+    process=subprocess.Popen([str(exe),"build",*args,"--pause-after","writing"],
+                             stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding="utf-8")
+    try:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(1) as pool:
+            line=pool.submit(process.stdout.readline).result(timeout=30)
+        assert line.strip()=="paused writing",line
+        run(exe,"resume",["--out",str(base/"candidate")],success=False)
+        process.kill()
+        process.communicate(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+    run(exe,"resume",["--out",str(base/"candidate")])
+    run(exe,"verify",["--out",str(base/"candidate")])
+    fresh=root/"fresh"
+    run(exe,"build",write_case(fresh,rows))
+    for filename in ("records.jsonl","target.fst","source.contract","target.contract"):
+        assert (base/"candidate"/filename).read_bytes()==(fresh/"candidate"/filename).read_bytes()
+    cases.append("process-kill-and-exclusive-lock")
+    (base/"input.jsonl").write_text("",encoding="utf-8")
+    run(exe,"resume",["--out",str(base/"candidate")],success=False)
+    assert json.loads((base/"candidate/report.json").read_text())["ready"] is False
+    cases.append("changed-input")
+    snapshot=fresh/"candidate/target.fst"
+    snapshot.write_bytes(snapshot.read_bytes()[:10])
+    run(exe,"verify",["--out",str(fresh/"candidate")],success=False)
+    assert json.loads((fresh/"candidate/report.json").read_text())["ready"] is False
+    run(exe,"resume",["--out",str(fresh/"candidate")],success=False)
+    cases.append("truncated-snapshot")
+    empty=root/"empty"
+    run(exe,"build",write_case(empty,[]))
+    run(exe,"verify",["--out",str(empty/"candidate")])
+    assert json.loads(run(exe,"query",["--out",str(empty/"candidate")]))["rows"]==[]
+    cases.append("empty-input")
+    duplicate=root/"duplicate"
+    args=write_case(duplicate,[rows[0],rows[0]])
+    run(exe,"build",args,success=False)
+    assert json.loads((duplicate/"candidate/report.json").read_text())["ready"] is False
+    cases.append("duplicate-input")
+    malformed=root/"malformed"
+    args=write_case(malformed,rows[:1])
+    (malformed/"input.jsonl").write_text('{"key_hex":"ff","value_hex":""}\n',encoding="utf-8")
+    run(exe,"build",args,success=False)
+    cases.append("malformed-key")
+    return cases
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe",type=Path,default=ROOT/"_build/bin"/("orderkey.exe" if os.name=="nt" else "orderkey"))
+    parser.add_argument("--report",type=Path)
     args=parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="orderkey-cli-", dir=ROOT / "_build") as temp:
+    with tempfile.TemporaryDirectory(prefix="orderkey-中文-",dir=ROOT/"_build") as temp:
         root=Path(temp)
-        result=[verify(args.exe.resolve(),root/"synthetic"),verify(args.exe.resolve(),root/"weather",True)]
-        print(json.dumps({"ready":True,"cases":result},indent=2))
+        report={"ready":False,"cases":[],"recovery_checks":[]}
+        if args.report:
+            args.report.write_text(json.dumps(report),encoding="utf-8")
+        report["cases"]=[verify(args.exe.resolve(),root/"synthetic"),verify(args.exe.resolve(),root/"weather",True)]
+        report["recovery_checks"]=failure_checks(args.exe.resolve(),root)
+        report["ready"]=True
+        if args.report:
+            args.report.write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
+        print(json.dumps(report,indent=2))
 if __name__=="__main__":
     main()

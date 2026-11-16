@@ -16,5 +16,5 @@ import {
 pkgtype(kind: "executable")
 
 options(
-  "allow-experimental-packages": [ "moonbitlang/core/async/fs" ],
+  "native-stub": [ "path_stub.c" ],
 )

@@ -193,3 +193,24 @@ async fn regular_files(dir : String) -> Array[String] {
 async fn put(path : String, bytes : Bytes) -> Unit {
   @fs.write_file(path, bytes, sync=Full)
 }
+
+///|
+#borrow(path)
+extern "C" fn change_directory(path : Bytes, length : Int32) -> Int32 = "orderkey_chdir"
+
+///|
+fn enter_directory(path : String) -> Unit raise {
+  let bytes = @utf8.encode(path)
+  if change_directory(bytes, bytes.length()) != 0 {
+    invalid("cannot enter native directory")
+  }
+}
+
+///|
+fn error_message(error : Error) -> String {
+  match error {
+    Invalid(message) | @moonlsm.Io(message) | @moonlsm.Corruption(message) =>
+      message
+    _ => error.to_string()
+  }
+}
