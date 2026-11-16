@@ -13,3 +13,11 @@
 OrderKey 的差异是用显式字段身份与代次约束索引和游标，对冻结记录做重排重编码，再以 SQLite 独立核对重开后的索引。公开查重覆盖已索引的资料。
 
 封版前复查了 Flock 的 memcomparable 键与范围、MoonKV 分页、MigrationLens 的 PostgreSQL 离线审查。在本轮公开检索里，最接近的能力分别来自这些项目。v0.0.8 复验同类型字段交换、旧游标拒绝、离线重建及双引擎和 SQLite 的逐条结果。
+
+## v0.0.9–v0.0.12 复查
+
+本轮公开检索使用 OrderKey、MoonBit、KV reindex、field contract 和 checkpoint 等关键词。对照继续覆盖 FoundationDB 与 Flock 的编码、MoonKV 的分页、MigrationLens 的 PostgreSQL 审查，以及 moon-data-contract 的 Schema 治理。各轮新增分别为完整键空间、真实文件、阶段恢复和公开下载复验。项目交付固定在字段身份约束下的有序 KV 换序、重建与逐条验收。
+
+- [moon-data-contract](https://mooncakes.io/docs/lyjttio/moon-data-contract@0.2.2) 处理业务数据契约和 Schema 演化。
+- [MigrationLens](https://mooncakes.io/docs/cn-xjr/migration_lens@0.1.0) 审查 SQL 迁移的执行上下文。
+- OrderKey 的实际演示覆盖读入编码 KV、构建与重开 MoonLSM、持久化并重载 MoonFST、终止进程与恢复后复验。

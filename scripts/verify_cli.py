@@ -185,6 +185,34 @@ def failure_checks(exe, root):
     (malformed/"input.jsonl").write_text('{"key_hex":"ff","value_hex":""}\n',encoding="utf-8")
     run(exe,"build",args,success=False)
     cases.append("malformed-key")
+    binary=root/"binary-contract"
+    args=write_case(binary,rows[:2])
+    def contract_bytes(c):
+        part=lambda b:struct.pack(">I",len(b))+b
+        tags={("bytes","asc"):16,("bytes","desc"):17,("int64","asc"):32,("int64","desc"):33}
+        layout=b"OK\x01"+bytes(tags[(f["kind"],f["direction"])] for f in c["fields"])
+        return b"OKC\x01"+struct.pack(">Q",int(c["generation"]))+part(c["index_id"].encode())+part(layout)+b"".join(part(f["id"].encode()) for f in c["fields"])
+    for name,generation in (("source",1),("target",2)):
+        (binary/(name+".json")).write_bytes(contract_bytes(contract(generation)))
+    run(exe,"build",args)
+    run(exe,"verify",["--out",str(binary/"candidate")])
+    # Every first byte is represented, including empty strings and escaped 00.
+    edge=root/"edge"
+    edge_rows=[(bytes([n]), b"\0\xff", -(1<<63) if n%2 else (1<<63)-1, n, bytes([n])) for n in range(256)]
+    edge_args=write_case(edge,edge_rows)
+    run(exe,"build",edge_args)
+    run(exe,"verify",["--out",str(edge/"candidate")])
+    assert len(json.loads(run(exe,"query",["--out",str(edge/"candidate"),"--limit","1000"]))["rows"])==256
+    assert json.loads(run(exe,"query",["--out",str(edge/"candidate"),"--end-hex",""]))["rows"]==[]
+    # An existing output must not be touched by a second build.
+    previous=(edge/"candidate/report.json").read_bytes()
+    run(exe,"build",edge_args,success=False)
+    assert previous==(edge/"candidate/report.json").read_bytes()
+    limit=root/"line-limit"
+    limit_args=write_case(limit,[])
+    (limit/"input.jsonl").write_bytes(b"x"*1048577)
+    run(exe,"build",limit_args,success=False)
+    cases.extend(("binary-contract","full-byte-keyspace","empty-range","existing-output","line-limit"))
     return cases
 
 

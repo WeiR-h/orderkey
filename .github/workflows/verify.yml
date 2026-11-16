@@ -1,12 +1,7 @@
 name: Verify OrderKey
-
-on:
-  push:
-  pull_request:
-
+on: [push, pull_request]
 permissions:
   contents: read
-
 jobs:
   verify:
     strategy:
@@ -19,6 +14,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: hustcer/setup-moonbit@v1.22
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -30,12 +27,29 @@ jobs:
       - run: moon test --deny-warn --target wasm .
       - run: moon test --deny-warn --target wasm-gc .
       - run: moon test --deny-warn --target js .
+      - run: moon test --deny-warn --target native .
       - run: python examples/moonlsm/verify_sqlite.py --baseline
       - run: python examples/moonlsm/verify_reindex.py --report reindex-report.json
+      - run: python scripts/test_reports.py
+      - run: python scripts/build.py
+      - run: python scripts/verify_cli.py --report cli-report.json
+      - run: python scripts/benchmark.py --report benchmark.json
       - run: moon package --list
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: reindex-${{ matrix.os }}
-          path: reindex-report.json
-          if-no-files-found: ignore
+          name: orderkey-${{ runner.os }}-x64
+          path: |
+            _build/bin/orderkey*
+            reindex-report.json
+            cli-report.json
+            benchmark.json
+            LICENSE
+            THIRD_PARTY.md
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failure-${{ runner.os }}
+          path: |
+            reindex-report.json
+            cli-report.json
+            benchmark.json

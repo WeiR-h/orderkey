@@ -300,6 +300,7 @@ async fn resume_stages(
       }
       @fs.rename(dir + "/db", dir + "/abandoned-db-" + n.to_string())
     }
+    progress(dir, "database")
     build_database(dir + "/db", input, args)
     atomic_json(
       checkpoint,
@@ -313,6 +314,7 @@ async fn resume_stages(
     inject(args, "database")
   }
   if phase == "database" {
+    progress(dir, "snapshot")
     snapshot(dir, input)
     atomic_json(
       checkpoint,
@@ -334,4 +336,16 @@ async fn resume_stages(
     ]),
   )
   inject(args, "verified")
+}
+
+///|
+async fn progress(dir : String, phase : String) -> Unit {
+  let state = json_file(dir + "/report.json")
+  match state {
+    Object(fields) => {
+      fields["phase"] = Json::string(phase)
+      atomic_json(dir + "/report.json", Json::object(fields))
+    }
+    _ => invalid("invalid report state")
+  }
 }

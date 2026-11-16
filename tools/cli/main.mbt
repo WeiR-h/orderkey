@@ -133,6 +133,7 @@ async fn execute(args : Array[String]) -> Unit {
   )
   try {
     if command == "build" {
+      progress(dir, "preflight")
       let input_path = @fs.realpath(option(args, "--input"))
       let source_path = @fs.realpath(option(args, "--source-contract"))
       let target_path = @fs.realpath(option(args, "--target-contract"))
@@ -169,6 +170,7 @@ async fn execute(args : Array[String]) -> Unit {
           ("ready", Json::boolean(false)),
           ("run_id", Json::string(run_id)),
           ("phase", Json::string(command)),
+          ("failed_stage", field(json_file(dir + "/report.json"), "phase")),
           ("first_difference", Json::string(error_message(error))),
         ]),
       )

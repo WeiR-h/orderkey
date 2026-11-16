@@ -15,7 +15,7 @@ def main():
     )
     subprocess.run(["moon", "build", "--release", "--target", "native", "tools/cli"],
                    cwd=ROOT, check=True)
-    name = "orderkey_cli.exe" if os.name == "nt" else "orderkey_cli.exe"
+    name = "orderkey_cli.exe"
     artifact = ROOT / "_build/native/release/build/WeiR-h/orderkey_cli" / name
     if not artifact.exists():
         candidates = [p for p in artifact.parent.iterdir() if p.name == "orderkey_cli"]

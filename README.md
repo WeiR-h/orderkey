@@ -6,7 +6,7 @@ OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储�
 
 ## 复现
 
-在完整项目的根目录运行。完整源码见 [GitHub](https://github.com/WeiR-h/orderkey)。此版本使用 MoonBit v0.10.20 工具链验证，MoonLSM 演示的 JS 后端需要 Node.js。 [MoonBit 工具链下载](https://www.moonbitlang.com/download/)
+在完整项目的根目录运行。完整源码见 [GitHub](https://github.com/WeiR-h/orderkey)。核心历史兼容基线使用 MoonBit v0.10.20 工具链验证，MoonLSM 演示的 JS 后端需要 Node.js。 [MoonBit 工具链下载](https://www.moonbitlang.com/download/)
 
 ```sh
 moon update
@@ -16,7 +16,7 @@ moon test --target js .
 moon run --target js examples/moonlsm
 ```
 
-可选的独立验证需要 Python 3.9+。脚本对合成数据和项目内的 NOAA 原始观测各运行一次双引擎验证，把 JS 和 Wasm GC 的键逐字节核对，再用 SQLite 比较多列排序、BLOB 排序和时间区间结果。
+可选的独立验证需要 Python 3.10+。脚本对合成数据和项目内的 NOAA 原始观测各运行一次双引擎验证，把 JS 和 Wasm GC 的键逐字节核对，再用 SQLite 比较多列排序、BLOB 排序和时间区间结果。
 
 ```sh
 python examples/moonlsm/verify_sqlite.py
@@ -26,12 +26,24 @@ python examples/moonlsm/verify_sqlite.py
 
 核心库只依赖 MoonBit 标准库。工作区的演示使用 [MoonLSM 0.3.2](https://mooncakes.io/docs/PingGuoMiaoMiao/moonlsm%400.3.2) 和 [MoonFST 0.1.1](https://mooncakes.io/docs/starAndHonor/fst%400.1.1)。
 
+## 真实文件与阶段恢复
+
+原生工具支持外部 KV JSONL 导出、JSON 或二进制契约、真实磁盘重建、快照分发和按阶段恢复。下载对应平台程序后，可以在新进程中重新核对候选。命令及文件格式见 [CLI 使用说明](docs/CLI.md)。
+
+~~~sh
+python scripts/build.py
+python scripts/verify_cli.py --report cli-report.json
+python scripts/benchmark.py --report benchmark.json
+~~~
+
+复验包括真实进程终止、任务锁、写入和同步失败、文件截断、输入变化以及中文路径。10 万条数据由固定种子生成，报告包含原生构建耗时、峰值驻留内存和磁盘用量。依赖与数据出处见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
 ## 使用示例
 
 从 Mooncakes 安装当前公开版本。
 
 ```sh
-moon add WeiR-h/orderkey@0.0.8
+moon add WeiR-h/orderkey@0.0.12
 ```
 
 在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。
