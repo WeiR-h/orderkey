@@ -45,8 +45,7 @@ fn scan_fixture(
   db : @moonlsm.Db[@moonlsm.MemStorage],
   count : Int32,
 ) -> Array[@moonlsm.KvPair] raise @moonlsm.LsmError {
-  // Fixture keys begin with ASCII source bytes. The layout key lives below 01.
-  db.scan(b"\x01", b"\xff", count + 1)
+  scan_range(db, Span(b"", None), count + 1)
 }
 
 ///|
@@ -60,4 +59,12 @@ fn emit_fixture_key(
   println(
     "key,\{@hex.encode(source[:])},\{@hex.encode(device[:])},\{time},\{sequence},\{@hex.encode(key[:])}",
   )
+}
+
+///|
+fn storage_key(key : Bytes) -> Bytes {
+  let output = @buffer.Buffer()
+  output.write_byte(1)
+  output.write_bytes(key[:])
+  output.to_bytes()
 }

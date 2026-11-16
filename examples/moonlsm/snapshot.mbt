@@ -18,11 +18,13 @@ fn scan_snapshot(
 ) -> Array[@fst.Entry] raise @fst.FstError {
   let stream = match range {
     Empty => return []
-    Span(start, None) if start.is_empty() => snapshot.stream()
+    Span(start, None) =>
+      snapshot.stream(range={
+        lower: @fst.Included(start),
+        upper: @fst.Unbounded,
+      })
     Span(start, Some(end)) =>
       snapshot.stream(range=@fst.KeyRange::between(start, end))
-    Span(_, None) =>
-      abort("this fixture requires a finite upper bound for nonempty starts")
   }
   let entries = stream.take(limit)
   stream.close()

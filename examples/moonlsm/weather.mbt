@@ -16,7 +16,8 @@ fn run_weather(packed : String, reindex : Bool) -> Unit raise {
           Signed(day),
           Signed(0L),
         ])
-        writer.put_deferred(key, @utf8.encode(observation[:])) |> ignore
+        writer.put_deferred(storage_key(key), @utf8.encode(observation[:]))
+        |> ignore
         emit_fixture_key(b"ghcnd", station_key, day, 0L, key)
         count += 1
       }

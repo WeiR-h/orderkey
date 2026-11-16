@@ -12,8 +12,15 @@ fn scan_range(
 ) -> Array[@moonlsm.KvPair] raise @moonlsm.LsmError {
   match range {
     Empty => []
-    Span(start, Some(end)) => db.scan(start, end, limit)
-    Span(_, None) => abort("this fixture requires a finite MoonLSM upper bound")
+    Span(start, end) => {
+      let stop = match end {
+        Some(end) => storage_key(end)
+        None => b"\x02"
+      }
+      db
+      .scan(storage_key(start), stop, limit)
+      .map(fn(row) { @moonlsm.KvPair::new(row.key[1:].to_owned(), row.value) })
+    }
   }
 }
 
@@ -48,7 +55,7 @@ fn run_demo(emit_fixture : Bool, reindex : Bool) -> Unit raise {
             Signed(timestamp),
             Signed(sequence),
           ])
-          writer.put_deferred(key, b"reading") |> ignore
+          writer.put_deferred(storage_key(key), b"reading") |> ignore
           if emit_fixture {
             emit_fixture_key(tenant, device, timestamp, sequence, key)
           }
@@ -89,7 +96,7 @@ fn run_demo(emit_fixture : Bool, reindex : Bool) -> Unit raise {
   let manual_end = b"t3\x00\x00pump\x00\xffA\x00\x00\x80\x00\x00\x00\x00\x00\x00\x02"
   assert_eq(range, @orderkey.Span(manual_start, Some(manual_end)))
 
-  let manual = db.scan(manual_start, manual_end, count + 1)
+  let manual = scan_range(db, Span(manual_start, Some(manual_end)), count + 1)
   let indexed = scan_range(db, range, count + 1)
   let indexed_pairs = indexed.map(fn(row) { (row.key, row.value) })
   assert_eq(indexed_pairs, manual.map(fn(row) { (row.key, row.value) }))
@@ -203,6 +210,7 @@ fn run_demo(emit_fixture : Bool, reindex : Bool) -> Unit raise {
 ///|
 fn main {
   try {
+    verify_keyspace()
     let args = @env.args()
     let count = args.length()
     if count >= 2 && args[count - 2] == "--weather-reindex" {

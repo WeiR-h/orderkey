@@ -81,3 +81,38 @@ test "a cursor is bound to generation, snapshot and original interval" {
     is Err(@orderkey.InvalidCursor),
   )
 }
+
+///|
+test "malformed lengths, trailing metadata and all truncated cursors are rejected" {
+  let contract = @orderkey.IndexContract::new(b"id", 18446744073709551615UL, [
+    (b"binary", BytesField(Desc)),
+    (b"number", Int64Field(Asc)),
+  ])
+  assert_true(
+    (Ok(
+      @orderkey.IndexContract::from_bytes(
+        b"OKC\x01\x00\x00\x00\x00\x00\x00\x00\x01\xff\xff\xff\xff",
+      ),
+    ) catch {
+      e => Err(e)
+    })
+    is Err(@orderkey.InvalidContract),
+  )
+  let spec = contract.key_spec()
+  let range = spec.prefix_range([])
+  let key = spec.encode([Binary(b""), Signed(-9223372036854775808L)])
+  let token = contract.issue_cursor(b"snapshot", range, key)
+  for size = 0; size < token.length(); size = size + 1 {
+    assert_true(
+      (Ok(contract.resume_cursor(b"snapshot", range, token[:size].to_owned())) catch {
+        e => Err(e)
+      })
+      is Err(_),
+    )
+  }
+  assert_false(contract.resume_cursor(b"snapshot", range, token).contains(key))
+  assert_true(
+    (Ok(contract.issue_cursor(b"", range, key)) catch { e => Err(e) })
+    is Err(@orderkey.InvalidCursor),
+  )
+}

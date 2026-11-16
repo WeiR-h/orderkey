@@ -9,6 +9,8 @@ from itertools import zip_longest
 from pathlib import Path
 import sqlite3
 import tempfile
+import uuid
+import subprocess
 
 from verify_sqlite import WEATHER, run_fixture, weather_fixture
 
@@ -162,12 +164,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, help="Write the receipt to an existing directory")
     args = parser.parse_args()
-    report = {"ready": False, "backends": ["js", "wasm-gc"], "cases": [], "first_difference": None}
+    report = {"schema_version": 1, "run_id": str(uuid.uuid4()), "failed_stage": None, "ready": False, "backends": ["js", "wasm-gc"], "cases": [], "first_difference": None}
+    if args.report:
+        write_report(args.report, report)
     for weather in (False, True):
         try:
             case = verify_case(weather)
-        except (OSError, RuntimeError, ValueError, AssertionError, sqlite3.Error) as error:
+        except (OSError, RuntimeError, ValueError, AssertionError, sqlite3.Error, subprocess.SubprocessError) as error:
             fixture = "NOAA GHCNd" if weather else "synthetic telemetry"
+            report["failed_stage"] = fixture
             report["first_difference"] = f"{fixture}: {error}"
             break
         report["cases"].append(case)

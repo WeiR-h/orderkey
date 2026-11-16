@@ -24,6 +24,7 @@ def run_fixture(target, arguments, project=PROJECT):
         capture_output=True,
         encoding="utf-8",
         check=False,
+        timeout=120,
     )
     if result.returncode:
         raise RuntimeError(result.stderr or result.stdout)
@@ -170,6 +171,7 @@ def main():
     if arguments.baseline:
         verify_baseline(synthetic, "v0.0.1", 0)
         verify_baseline(synthetic, "v0.0.4", 18)
+        verify_baseline(synthetic, "v0.0.8", 18)
         verify_weather_baseline(weather, weather_result)
 
 

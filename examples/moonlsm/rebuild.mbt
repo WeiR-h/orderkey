@@ -12,10 +12,10 @@ fn write_reindexed(
   for row in rows {
     let (old_key, value) = row
     let key = plan.rekey(old_key)
-    if writer.get(key) is Some(_) {
+    if writer.get(storage_key(key)) is Some(_) {
       raise DuplicateTargetKey
     }
-    writer.put_deferred(key, value) |> ignore
+    writer.put_deferred(storage_key(key), value) |> ignore
   }
 }
 

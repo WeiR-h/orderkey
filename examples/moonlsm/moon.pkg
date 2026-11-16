@@ -1,4 +1,5 @@
 import {
+  "moonbitlang/core/buffer",
   "WeiR-h/orderkey",
   "PingGuoMiaoMiao/moonlsm",
   "starAndHonor/fst",
