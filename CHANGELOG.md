@@ -69,7 +69,7 @@
 - 本地初始版本号调整为 v0.0.1，键字节格式仍为 v1。
 # 0.0.13–0.0.18 implementation candidate (unreleased)
 
-- Project-scoped stable toolchain installer, explicit compiler/core pin, build identity and release guard. Latest stable download is blocked by DNS; baseline remains 0.10.20.
+- Project-scoped stable toolchain installer, explicit compiler/core pin, build identity and release guard. Official stable 0.10.21+06da1ed44 installed from the official CN mirror; archive SHA-256 verified. The 0.10.20 baseline is retained.
 - Typed field-identity queries, canonical predicate-scoped cursors and source/target access explanations.
 - Workload checks replay frozen input into MoonLSM, compare target MoonLSM/FST and pagination, and enforce independent scan budgets. Data readiness and workload approval remain separate.
 - Snapshot reader module validates portable artifacts once, then serves pages without filesystem access. Device/weather consumers and 100-page measurements included.

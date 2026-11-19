@@ -8,12 +8,15 @@ import subprocess
 ROOT=Path(__file__).resolve().parents[1]
 
 def main():
+    from toolchain import activate
+    activate()
     pin=json.loads((ROOT/'toolchain.json').read_text())
     if pin['channel']!='stable':raise RuntimeError('Latest stable upgrade is unverified; candidate packages only')
     actual=subprocess.check_output(['moonc','-v'],text=True)
     if 'v'+pin['version']+' ' not in actual:raise RuntimeError('Compiler differs from pinned toolchain')
     acceptance=json.loads((ROOT/'_build/acceptance/acceptance.json').read_text())
     if not acceptance['ready']:raise RuntimeError('Acceptance failed')
+    if acceptance['build']['compiler'] != actual.strip():raise RuntimeError('Acceptance was built with a different compiler')
     current=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     if subprocess.check_output(['git','status','--porcelain'],cwd=ROOT):raise RuntimeError('Source tree is dirty')
     if acceptance['build']['build_commit']!=current or acceptance['build']['dirty']:raise RuntimeError('Acceptance does not match clean source')

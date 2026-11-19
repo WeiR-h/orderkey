@@ -5,14 +5,14 @@
 ## 开始
 
 ```sh
-python scripts/upgrade_toolchain.py
+python scripts/upgrade_toolchain.py --mirror cn
 # 将输出目录的 bin 加到当前终端 PATH，并设置 MOON_HOME 为该目录。
 moon update
 python scripts/build.py
 python scripts/acceptance.py
 ```
 
-升级器校验官方下载包的 SHA-256，并安装编译器对应的标准库。只有安装和标准库构建成功才更新 toolchain.json；失败保留已有环境。CI 从该文件读取固定编译器和标准库版本。当前升级受官方域名 DNS 解析失败阻塞，固定文件明确标为 historical-baseline；本地使用 v0.10.20 验证候选，正式发布门禁会拒绝它。
+升级器校验官方下载包的 SHA-256，并安装编译器对应的标准库。只有安装和标准库构建成功才更新 toolchain.json；失败保留已有环境。CI 从该文件读取固定编译器和标准库版本。当前固定版为官方稳定渠道的 moonc v0.10.21+06da1ed44（2026-11-16），通过官方中国镜像下载并核验。整包连接停滞时，下载器使用带 ETag 和长度检查的分段请求，最后仍核对完整 SHA-256。标准库使用同一编译器版本。
 
 ## 查询文件
 
