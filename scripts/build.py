@@ -16,8 +16,8 @@ def main():
     compiler = subprocess.check_output(["moonc", "-v"], text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT))
     (ROOT / "tools/cli/build_id.mbt").write_text(
-        f'let tool_version = "{version}"\nlet build_commit = "{commit}"\n'
-        + f'let build_compiler = {json.dumps(compiler)}\nlet build_dirty = {str(dirty).lower()}\n', encoding="utf-8"
+        f'///|\nlet tool_version = "{version}"\n\n///|\nlet build_commit = "{commit}"\n'
+        + f'\n///|\nlet build_compiler = {json.dumps(compiler)}\n\n///|\nlet build_dirty = {str(dirty).lower()}\n', encoding="utf-8"
     )
     subprocess.run(["moon", "build", "--release", "--target", "native", "tools/cli"],
                    cwd=ROOT, check=True)
