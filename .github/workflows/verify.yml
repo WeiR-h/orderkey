@@ -36,6 +36,14 @@ jobs:
       - run: python scripts/acceptance.py
       - run: moon package --list
       - run: python scripts/package.py --candidate
+      - name: Reopen the packaged CLI
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess, sys
+          archive, = Path('_build/distribution').glob('orderkey-*-candidate-*-x64.zip')
+          subprocess.run([sys.executable, 'scripts/verify_distribution.py', str(archive),
+                          '--report', '_build/acceptance/distribution-report.json'], check=True)
       - uses: actions/upload-artifact@v4
         with:
           name: orderkey-${{ runner.os }}-x64-candidate

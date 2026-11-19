@@ -1,4 +1,4 @@
-> 源码候选新增字段查询、explain、check-queries 和快照 SDK，见 [查询指南](QUERIES.md)。正式公开版本仍为 0.0.12。
+> v0.1.0 提供布局比较、自动推荐和验收。 [布局选型指南](LAYOUTS.md) · [字段查询和快照 SDK](QUERIES.md)
 
 # Native file tool
 

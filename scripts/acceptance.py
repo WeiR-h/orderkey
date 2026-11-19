@@ -26,9 +26,11 @@ def main():
            ['moon','check','--deny-warn','--target','native','tools/cli','snapshot'],
            [sys.executable,'scripts/verify_cli.py','--report',str(OUT/'cli-report.json')],
            [sys.executable,'scripts/verify_queries.py','--report',str(OUT/'queries-report.json')],
+           [sys.executable,'scripts/verify_layouts.py','--report',str(OUT/'layouts-report.json')],
            [sys.executable,'scripts/verify_snapshot.py','--report',str(OUT/'snapshot-report.json')],
            [sys.executable,'scripts/verify_consumer.py','--report',str(OUT/'consumer-report.json')],
-           [sys.executable,'scripts/benchmark.py','--report',str(OUT/'benchmark.json')]]
+           [sys.executable,'scripts/benchmark.py','--report',str(OUT/'benchmark.json')],
+           [sys.executable,'scripts/benchmark_layouts.py','--report',str(OUT/'layout-benchmark.json')]]
     try:
         for command in steps:
             print('Checking: '+' '.join(command),flush=True)

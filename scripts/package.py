@@ -10,6 +10,7 @@ import platform
 import tempfile
 import zipfile
 from verify_cli import ROOT, dataset, write_case
+from verify_layouts import workload, write_json
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -24,7 +25,8 @@ def main():
     name="orderkey-"+version+("-candidate-" if options.candidate else "-")+("windows" if os.name=="nt" else "linux")+"-x64.zip"
     toolchain=Path(os.environ.get("MOON_HOME",Path.home()/".moon"))
     files={exe.name:exe,"LICENSE":ROOT/"LICENSE","THIRD_PARTY.md":ROOT/"THIRD_PARTY.md",
-           "README.md":ROOT/"docs/CLI.md","DEMO.md":ROOT/"docs/DEMO.md","QUERIES.md":ROOT/"docs/QUERIES.md","toolchain.json":ROOT/"toolchain.json"}
+           "README.md":ROOT/"docs/CLI.md","DEMO.md":ROOT/"docs/DEMO.md","QUERIES.md":ROOT/"docs/QUERIES.md",
+           "LAYOUTS.md":ROOT/"docs/LAYOUTS.md","toolchain.json":ROOT/"toolchain.json"}
     for module in ("PingGuoMiaoMiao/moonlsm","starAndHonor/fst","moonbitlang/async","gmlewis/sha256","gmlewis/base64"):
         path=ROOT/".mooncakes"/module/"LICENSE"
         if not path.is_file(): raise RuntimeError("dependency license missing: "+module)
@@ -33,7 +35,9 @@ def main():
         path=toolchain/"lib/core"/license_name
         if not path.is_file(): raise RuntimeError("core notice missing: "+license_name)
         files["third-party-licenses/moonbit-core-"+license_name+".txt"]=path
-    for report in ("reindex-report.json","cli-report.json","benchmark.json","queries-report.json","snapshot-report.json","consumer-report.json","acceptance.json"):
+    for report in ("reindex-report.json","cli-report.json","benchmark.json","queries-report.json",
+                   "snapshot-report.json","consumer-report.json","layouts-report.json",
+                   "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():
             value=json.loads((ROOT/"_build/acceptance"/report).read_text())
@@ -47,7 +51,11 @@ def main():
             from verify_queries import queries
             (base/'workload.json').write_text(json.dumps(queries(weather),indent=2)+'\n',encoding='utf-8')
             (base/'where.json').write_text(json.dumps(queries(weather)['queries'][0],indent=2)+'\n',encoding='utf-8')
-            for leaf in ("source.json","target.json","input.jsonl","workload.json","where.json"):
+            write_json(base / 'layout-workload.json', workload(weather))
+            if not weather:
+                write_json(base / 'conflict-workload.json', workload(conflict=True))
+                files["examples/telemetry/conflict-workload.json"] = base / 'conflict-workload.json'
+            for leaf in ("source.json","target.json","input.jsonl","workload.json","where.json","layout-workload.json"):
                 files["examples/"+fixture+"/"+leaf]=base/leaf
         with zipfile.ZipFile(destination/name,"w",zipfile.ZIP_DEFLATED) as archive:
             for target,path in sorted(files.items()):
