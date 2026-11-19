@@ -1,0 +1,38 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "WeiR-h/orderkey_snapshot"
+
+import {
+  "WeiR-h/orderkey",
+}
+
+// Values
+
+// Errors
+pub suberror SnapshotError {
+  InvalidSnapshot(String)
+}
+
+// Types and methods
+pub(all) struct Page {
+  rows : Array[Record]
+  cursor : Bytes?
+  scanned : Int32
+}
+
+pub struct Reader {
+  // private fields
+}
+pub fn Reader::loaded_bytes(Self) -> Int64
+pub async fn Reader::open(String) -> Self
+pub fn Reader::plan(Self, @orderkey.QuerySpec) -> @orderkey.QueryPlan raise
+pub fn Reader::query(Self, @orderkey.QuerySpec, limit? : Int32, cursor? : Bytes?) -> Page raise
+pub fn Reader::row_count(Self) -> Int32
+
+pub(all) struct Record {
+  key : Bytes
+  value : Bytes
+}
+
+// Type aliases
+
+// Traits

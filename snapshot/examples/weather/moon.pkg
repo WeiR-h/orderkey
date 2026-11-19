@@ -1,0 +1,9 @@
+import {
+  "moonbitlang/async",
+  "WeiR-h/orderkey",
+  "WeiR-h/orderkey_snapshot" @snapshot,
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/hex",
+}
+
+pkgtype(kind: "executable")

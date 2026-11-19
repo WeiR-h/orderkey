@@ -82,7 +82,24 @@ async fn query(args : Array[String], dir : String) -> Unit {
 ///|
 async fn execute(args : Array[String]) -> Unit {
   let command = args[1]
-  if !["plan", "build", "resume", "verify", "query"].contains(command) {
+  if command == "version" {
+    println(
+      object([
+        ("version", Json::string(tool_version)),
+        ("build_commit", Json::string(build_commit)),
+        ("compiler", Json::string(build_compiler)),
+        ("dirty", Json::boolean(build_dirty)),
+      ]).stringify(),
+    )
+    return
+  }
+  if command == "explain" {
+    explain(args)
+    return
+  }
+  if !["plan", "build", "resume", "verify", "query", "check-queries"].contains(
+      command,
+    ) {
     invalid("unknown command " + command)
   }
   let dir = option(args, "--out")
@@ -118,7 +135,15 @@ async fn execute(args : Array[String]) -> Unit {
     invalid("job is locked")
   }
   if command == "query" {
-    query(args, dir)
+    if args.contains("--where") {
+      semantic_query(args, dir)
+    } else {
+      query(args, dir)
+    }
+    return
+  }
+  if command == "check-queries" {
+    check_queries(args, dir)
     return
   }
   let run_id = @async.now().to_string()
@@ -189,7 +214,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " plan|build|resume|verify|query --input FILE --source-contract FILE --target-contract FILE --out DIR",
+      " version|plan|build|resume|verify|query|explain|check-queries --input FILE --source-contract FILE --target-contract FILE --out DIR",
     )
     return
   }

@@ -54,11 +54,27 @@ fn target_rows(input : Input) -> Array[Row] raise {
 ///|
 fn same_rows(actual : Array[Row], expected : Array[Row]) -> Unit raise {
   if actual.length() != expected.length() {
-    invalid("record count differs")
+    invalid(
+      "record count differs: expected=" +
+      expected.length().to_string() +
+      " actual=" +
+      actual.length().to_string(),
+    )
   }
   for i, row in actual {
     if row.key != expected[i].key || row.value != expected[i].value {
-      invalid("record differs at ordinal " + i.to_string())
+      invalid(
+        "record differs at ordinal " +
+        i.to_string() +
+        " expected_key=" +
+        hex(expected[i].key) +
+        " actual_key=" +
+        hex(row.key) +
+        " expected_value_sha256=" +
+        hash(expected[i].value) +
+        " actual_value_sha256=" +
+        hash(row.value),
+      )
     }
   }
 }

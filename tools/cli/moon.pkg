@@ -1,5 +1,6 @@
 import {
   "WeiR-h/orderkey",
+  "WeiR-h/orderkey_snapshot" @snapshot,
   "PingGuoMiaoMiao/moonlsm",
   "starAndHonor/fst",
   "gmlewis/sha256",
