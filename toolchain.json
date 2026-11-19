@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "channel": "historical-baseline",
+  "version": "0.10.20+65efd5b93",
+  "upgrade_status": "blocked-official-download-dns",
+  "requested_channel": "stable"
+}

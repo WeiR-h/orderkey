@@ -2,16 +2,22 @@
 from pathlib import Path
 import os
 import re
+import json
 import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 
 def main():
+    from toolchain import activate
+    activate()
     version = re.search(r'version = "([^"]+)"', (ROOT / "tools/cli/moon.mod").read_text()).group(1)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    compiler = subprocess.check_output(["moonc", "-v"], text=True).strip()
+    dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT))
     (ROOT / "tools/cli/build_id.mbt").write_text(
-        f'let tool_version = "{version}"\nlet build_commit = "{commit}"\n', encoding="utf-8"
+        f'let tool_version = "{version}"\nlet build_commit = "{commit}"\n'
+        + f'let build_compiler = {json.dumps(compiler)}\nlet build_dirty = {str(dirty).lower()}\n', encoding="utf-8"
     )
     subprocess.run(["moon", "build", "--release", "--target", "native", "tools/cli"],
                    cwd=ROOT, check=True)

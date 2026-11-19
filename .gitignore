@@ -2,3 +2,5 @@ _build/
 .mooncakes/
 __pycache__/
 tools/cli/build_id.mbt
+.tools/
+toolchain.json.tmp
