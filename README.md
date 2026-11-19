@@ -4,7 +4,7 @@
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
-小版本的交付见 [CHANGELOG.md](CHANGELOG.md)，历史基线见 [v0.0.4 验证记录](verification/2026-11-10-v0.0.4.md)，当前复验报告随 [v0.0.12 发布](https://github.com/WeiR-h/orderkey/releases/tag/v0.0.12) 提供。包版本与 v1 键格式是独立的。
+各版本交付见 [CHANGELOG.md](CHANGELOG.md)，Windows 与 Linux 程序及复验报告随 [GitHub Releases](https://github.com/WeiR-h/orderkey/releases) 提供。v0.1.0 沿用 v1 键格式。
 
 ## 复现
 
@@ -42,10 +42,11 @@ python scripts/benchmark.py --report benchmark.json
 
 ## 使用示例
 
-从 Mooncakes 安装当前公开版本。
+从 Mooncakes 安装 v0.1.0 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
 
 ```sh
-moon add WeiR-h/orderkey@0.0.12
+moon add WeiR-h/orderkey@0.1.0
+moon add WeiR-h/orderkey_snapshot@0.1.0
 ```
 
 在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。
