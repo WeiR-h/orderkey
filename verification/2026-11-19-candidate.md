@@ -15,3 +15,5 @@
 最新稳定编译器下载被网络 DNS 阻塞：官方 cli.moonbitlang.com 不能解析；当前使用 v0.10.20+65efd5b93（2026-11-05）。toolchain.json 明确标为 historical-baseline，release_gate.py 拒绝正式发布。升级器下载成功、校验并构建配套标准库后才更新固定版本，项目入口与 CI 会读取该固定值。
 
 本机为 Windows；Linux CI 已配置，未运行本轮远端 CI，不宣称 Linux 通过。公开版本仍为 v0.0.12。本轮没有取得独立用户反馈。初审根据用户提供通知为通过，最终验收和季度评选未确认。
+
+SDK 打包检查发现父模块忽略规则会产生空包，已改为 scripts/package_snapshot.py 独立暂存打包，并从实际源码包解压到新模块验证导入、编译和查询。

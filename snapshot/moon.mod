@@ -1,6 +1,7 @@
 name = "WeiR-h/orderkey_snapshot"
 
 version = "0.0.18"
+readme = "README.md"
 
 license = "MIT"
 

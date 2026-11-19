@@ -92,6 +92,7 @@ python scripts/demo_queries.py --out _build/query-demo
 python scripts/demo.py --out _build/recovery-demo
 python scripts/acceptance.py
 python scripts/package.py --candidate
+python scripts/package_snapshot.py
 python scripts/release_gate.py
 ```
 
