@@ -9,7 +9,17 @@ type CliError
 // Types and methods
 type Input
 
+type LayoutInput
+
+type LayoutOptions
+
+type LayoutQuery
+
+type LayoutScore
+
 type Row
+
+type SelectedLayout
 
 // Type aliases
 

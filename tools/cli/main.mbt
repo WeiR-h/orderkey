@@ -97,9 +97,13 @@ async fn execute(args : Array[String]) -> Unit {
     explain(args)
     return
   }
-  if !["plan", "build", "resume", "verify", "query", "check-queries"].contains(
-      command,
-    ) {
+  if command == "compare-layouts" {
+    compare_layouts(args)
+    return
+  }
+  if ![
+      "plan", "build", "resume", "verify", "query", "check-queries", "build-selected",
+    ].contains(command) {
     invalid("unknown command " + command)
   }
   let dir = option(args, "--out")
@@ -117,7 +121,13 @@ async fn execute(args : Array[String]) -> Unit {
     )
     return
   }
-  if command == "build" {
+  let selected = if command == "build-selected" {
+    Some(prepare_selection(args))
+  } else {
+    None
+  }
+  if command == "build" ||
+    (command == "build-selected" && !args.contains("--resume")) {
     @fs.mkdir(dir, allow_exist=false)
   }
   if @fs.kind(dir, follow_symlink=false) != @fs.Directory {
@@ -133,6 +143,10 @@ async fn execute(args : Array[String]) -> Unit {
   defer lock.close()
   if !lock.try_lock(Exclusive) {
     invalid("job is locked")
+  }
+  if selected is Some(selection) {
+    build_selected(args, dir, selection)
+    return
   }
   if command == "query" {
     if args.contains("--where") {
@@ -159,21 +173,12 @@ async fn execute(args : Array[String]) -> Unit {
   try {
     if command == "build" {
       progress(dir, "preflight")
-      let input_path = @fs.realpath(option(args, "--input"))
-      let source_path = @fs.realpath(option(args, "--source-contract"))
-      let target_path = @fs.realpath(option(args, "--target-contract"))
-      let input = prepare(input_path, source_path, target_path)
-      atomic_json(
-        dir + "/plan.json",
-        object([
-          ("input_path", Json::string(input_path)),
-          ("source_path", Json::string(source_path)),
-          ("target_path", Json::string(target_path)),
-          ("fingerprint", Json::string(input.fingerprint)),
-        ]),
+      record_plan(
+        dir,
+        option(args, "--input"),
+        option(args, "--source-contract"),
+        option(args, "--target-contract"),
       )
-      put(dir + "/source.contract", input.source.to_bytes())
-      put(dir + "/target.contract", input.target.to_bytes())
     }
     let input = persisted_input(dir)
     input.source.require_same(read(dir + "/source.contract"))
@@ -214,7 +219,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|build|resume|verify|query|explain|check-queries --input FILE --source-contract FILE --target-contract FILE --out DIR",
+      " version|plan|build|resume|verify|query|explain|check-queries|compare-layouts|build-selected --input FILE --source-contract FILE --target-contract FILE --out DIR",
     )
     return
   }

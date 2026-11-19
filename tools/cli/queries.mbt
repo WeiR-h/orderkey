@@ -95,27 +95,6 @@ async fn explain(args : Array[String]) -> Unit {
 }
 
 ///|
-fn fst_entries(
-  map : @fst.FstMap,
-  range : @orderkey.ByteRange,
-  count : Int32,
-) -> Array[@fst.Entry] raise {
-  let stream = match range {
-    Empty => map.stream(range=@fst.KeyRange::between(b"", b""))
-    Span(first, last) =>
-      map.stream(range={
-        lower: @fst.Included(first),
-        upper: match last {
-          None => @fst.Unbounded
-          Some(last) => @fst.Excluded(last)
-        },
-      })
-  }
-  defer stream.close()
-  stream.take(count)
-}
-
-///|
 async fn semantic_query(args : Array[String], dir : String) -> Unit {
   if args.contains("--start-hex") || args.contains("--end-hex") {
     invalid("--where cannot be combined with byte bounds")

@@ -75,23 +75,17 @@ fn positive_integer(
 }
 
 ///|
-async fn workload(args : Array[String], dir : String) -> Json {
+async fn workload(
+  args : Array[String],
+  dir : String,
+  replay_source~ : Bool = true,
+) -> Json {
   let manifest = require_ready(dir)
   let manifest_hash = hash(read(dir + "/manifest.json"))
   let input = persisted_input(dir)
   verify_contents(dir, input)
   let raw = read(option(args, "--queries"), maximum=1048576)
-  let specification = @json.parse(@utf8.decode(raw), reject_duplicate_keys=true)
-  only_fields(specification, ["schema_version", "queries"])
-  if field(specification, "schema_version") != Json::number(1) {
-    invalid("unsupported workload version")
-  }
-  guard field(specification, "queries") is Array(queries) else {
-    raise Invalid("queries must be an array")
-  }
-  if queries.is_empty() || queries.length() > 100 {
-    invalid("workload requires 1..100 queries")
-  }
+  let queries = parse_workload(raw)
   // Private copies: opening MoonLSM can change metadata.
   let mut ordinal = 0
   while @fs.exists(dir + "/probe-" + ordinal.to_string()) {
@@ -100,7 +94,9 @@ async fn workload(args : Array[String], dir : String) -> Json {
   let scratch = dir + "/probe-" + ordinal.to_string()
   @fs.mkdir(scratch)
   defer @fs.rmdir(scratch, recursive=true)
-  write_source_database(scratch + "/source", input.rows)
+  if replay_source {
+    write_source_database(scratch + "/source", input.rows)
+  }
   @fs.mkdir(scratch + "/target")
   @fs.mkdir(scratch + "/target/sst")
   @fs.mkdir(scratch + "/target/wal")
@@ -110,7 +106,7 @@ async fn workload(args : Array[String], dir : String) -> Json {
   let target = target_rows(input)
   let source = input.rows.copy()
   source.sort_by((a, b) => a.key.lexical_compare(b.key))
-  let map = @fst.FstMap::from_bytes(read(dir + "/target.fst"))
+  let reader = @snapshot.Reader::open(dir)
   let results = []
   let seen : Map[String, Unit] = Map([])
   let mut passed = true
@@ -127,11 +123,15 @@ async fn workload(args : Array[String], dir : String) -> Json {
       let target_plan = predicate.plan(input.target)
       let page_size = positive_integer(query, "page_size", 100)
       let budget = positive_integer(query, "max_target_scanned", 100000)
-      let source_scanned = probe_database(
-        scratch + "/source",
-        source_plan.byte_range(),
-        source.length(),
-      )
+      let source_scanned = if replay_source {
+        probe_database(
+          scratch + "/source",
+          source_plan.byte_range(),
+          source.length(),
+        )
+      } else {
+        source.filter(row => source_plan.byte_range().contains(row.key))
+      }
       let target_scanned = probe_database(
         scratch + "/target",
         target_plan.byte_range(),
@@ -150,62 +150,27 @@ async fn workload(args : Array[String], dir : String) -> Json {
         logical_rows(source_actual, input.source),
         logical_rows(actual, input.target),
       )
-      let fst_actual = fst_entries(
-          map,
-          target_plan.byte_range(),
-          target.length() + 1,
-        )
-        .map(entry => {
-          if entry.value >= target.length().to_uint64() {
-            raise Invalid("FST ordinal outside records")
-          }
-          let row = target[entry.value.to_int()]
-          if row.key != entry.key {
-            raise Invalid("FST key/ordinal differs")
-          }
-          row
-        })
-        .filter(row => target_plan.matches(row.key))
-      same_rows(fst_actual, expected)
-      // Resume using the unchanged original scope, including residual predicates.
-      let scope = @utf8.encode(hash(predicate.to_bytes()) + manifest_hash)
-      let mut window = target_plan.byte_range()
       let pages = []
+      let mut cursor : Bytes? = None
+      let mut fst_scanned = 0
       while true {
-        let entries = fst_entries(map, window, target.length() + 1)
-        let mut scanned = 0
-        let mut matches = 0
-        let mut last : Bytes? = None
-        for entry in entries {
-          scanned += 1
-          last = Some(entry.key)
-          let row = target[entry.value.to_int()]
-          if target_plan.matches(row.key) {
-            pages.push(row)
-            matches += 1
-            if matches == page_size {
-              break
-            }
-          }
+        let page = reader.query(predicate, limit=page_size, cursor~)
+        fst_scanned += page.scanned
+        for row in page.rows {
+          pages.push({ key: row.key, value: row.value, })
         }
-        if scanned == entries.length() {
+        if page.cursor is None {
           break
         }
-        guard last is Some(key) else {
-          raise Invalid("pagination made no progress")
+        if page.cursor == cursor || fst_scanned > target.length() {
+          invalid("pagination made no progress")
         }
-        let cursor = input.target.issue_cursor(
-          scope,
-          target_plan.byte_range(),
-          key,
-        )
-        window = input.target.resume_cursor(
-          scope,
-          target_plan.byte_range(),
-          cursor,
-        )
+        cursor = page.cursor
       }
       same_rows(pages, expected)
+      if fst_scanned != target_scanned.length() {
+        invalid("FST scan count differs")
+      }
       let within_budget = target_scanned.length() <= budget
       if !within_budget {
         passed = false
@@ -225,6 +190,7 @@ async fn workload(args : Array[String], dir : String) -> Json {
           ("source_scanned", Json::number(source_scanned.length().to_double())),
           ("target_scanned", Json::number(target_scanned.length().to_double())),
           ("matched", Json::number(actual.length().to_double())),
+          ("fst_scanned", Json::number(fst_scanned.to_double())),
           (
             "filtered",
             Json::number(
@@ -242,7 +208,7 @@ async fn workload(args : Array[String], dir : String) -> Json {
     }
   }
   if persisted_input(dir).fingerprint != input.fingerprint ||
-    hash(read(option(args, "--queries"))) != hash(raw) {
+    hash(read(option(args, "--queries"), maximum=1048576)) != hash(raw) {
     invalid("input or workload changed during verification")
   }
   require_ready(dir) |> ignore

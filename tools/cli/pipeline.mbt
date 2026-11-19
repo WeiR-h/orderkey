@@ -28,6 +28,43 @@ async fn prepare(
 }
 
 ///|
+async fn record_plan(
+  dir : String,
+  input_path : String,
+  source_path : String,
+  target_path : String,
+) -> Unit {
+  let input_path = @fs.realpath(input_path)
+  let source_path = @fs.realpath(source_path)
+  let target_path = @fs.realpath(target_path)
+  let input = prepare(input_path, source_path, target_path)
+  atomic_json(
+    dir + "/plan.json",
+    object([
+      ("input_path", Json::string(input_path)),
+      ("source_path", Json::string(source_path)),
+      ("target_path", Json::string(target_path)),
+      ("fingerprint", Json::string(input.fingerprint)),
+    ]),
+  )
+  for
+    (name, expected) in [
+      ("source.contract", input.source.to_bytes()),
+      ("target.contract", input.target.to_bytes()),
+    ] {
+    let path = dir + "/" + name
+    if @fs.exists(path) {
+      if read(path) != expected {
+        invalid("job " + name + " differs")
+      }
+    } else {
+      put(path + ".tmp", expected)
+      @fs.rename(path + ".tmp", path)
+    }
+  }
+}
+
+///|
 async fn persisted_input(dir : String) -> Input {
   let plan = json_file(dir + "/plan.json")
   let source = text(field(plan, "input_path"))

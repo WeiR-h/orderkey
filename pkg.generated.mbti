@@ -84,6 +84,7 @@ pub fn IndexContract::logical_key(Self, Bytes) -> Bytes raise KeyError
 pub fn IndexContract::new(Bytes, UInt64, Array[(Bytes, Field)]) -> Self raise ContractError
 pub fn IndexContract::require_same(Self, Bytes) -> Unit raise ContractError
 pub fn IndexContract::resume_cursor(Self, Bytes, ByteRange, Bytes) -> ByteRange raise
+pub fn IndexContract::successor(Self, Array[(Bytes, Field)]) -> Self raise ContractError
 pub fn IndexContract::to_bytes(Self) -> Bytes
 
 pub struct KeySpec {
