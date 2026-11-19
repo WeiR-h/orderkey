@@ -51,6 +51,12 @@ pub fn IndexContract::key_spec(self : IndexContract) -> KeySpec {
 }
 
 ///|
+/// Ordered field identities and types. The returned array is independent.
+pub fn IndexContract::fields(self : IndexContract) -> Array[(Bytes, Field)] {
+  self.field_ids.mapi((i, id) => (id, self.spec.fields[i]))
+}
+
+///|
 fn write_part(buffer : @buffer.Buffer, bytes : Bytes) -> Unit {
   let length = bytes.length()
   for shift = 24; shift >= 0; shift = shift - 8 {

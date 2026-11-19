@@ -34,6 +34,10 @@ pub suberror KeyError {
 }
 pub fn KeyError::to_repr(Self) -> @debug.Repr
 
+pub suberror QueryError {
+  InvalidQuery(String)
+}
+
 #derive(@debug.Debug)
 pub suberror ReindexError {
   DifferentIndex
@@ -72,9 +76,11 @@ pub(all) enum Field {
 pub struct IndexContract {
   // private fields
 }
+pub fn IndexContract::fields(Self) -> Array[(Bytes, Field)]
 pub fn IndexContract::from_bytes(Bytes) -> Self raise ContractError
 pub fn IndexContract::issue_cursor(Self, Bytes, ByteRange, Bytes) -> Bytes raise
 pub fn IndexContract::key_spec(Self) -> KeySpec
+pub fn IndexContract::logical_key(Self, Bytes) -> Bytes raise KeyError
 pub fn IndexContract::new(Bytes, UInt64, Array[(Bytes, Field)]) -> Self raise ContractError
 pub fn IndexContract::require_same(Self, Bytes) -> Unit raise ContractError
 pub fn IndexContract::resume_cursor(Self, Bytes, ByteRange, Bytes) -> ByteRange raise
@@ -93,6 +99,22 @@ pub fn KeySpec::prefix_range(Self, Array[Value]) -> ByteRange raise KeyError
 pub fn KeySpec::require_layout(Self, Bytes) -> Unit raise KeyError
 pub fn KeySpec::resume_after(Self, ByteRange, Bytes) -> ByteRange raise KeyError
 pub fn KeySpec::tuple_range(Self, Array[Value], TupleBound, TupleBound) -> ByteRange raise KeyError
+
+pub struct QueryPlan {
+  // private fields
+}
+pub fn QueryPlan::access(Self) -> String
+pub fn QueryPlan::byte_range(Self) -> ByteRange
+pub fn QueryPlan::matches(Self, Bytes) -> Bool raise KeyError
+pub fn QueryPlan::prefix_fields(Self) -> Int32
+pub fn QueryPlan::residual_fields(Self) -> Int32
+
+pub struct QuerySpec {
+  // private fields
+}
+pub fn QuerySpec::new(Array[(Bytes, Value)], (Bytes, Value?, Value?)?) -> Self raise QueryError
+pub fn QuerySpec::plan(Self, IndexContract) -> QueryPlan raise
+pub fn QuerySpec::to_bytes(Self) -> Bytes
 
 pub struct ReindexPlan {
   // private fields
