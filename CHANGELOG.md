@@ -67,3 +67,10 @@
 - 复合键编码、逐字段升降序、前缀范围、单字段区间和排他游标。
 - MoonLSM 0.3.2 接入和 SQLite 对照。重开数据库后，三条扫描路径与分页返回相同记录。
 - 本地初始版本号调整为 v0.0.1，键字节格式仍为 v1。
+# 0.0.13–0.0.18 implementation candidate (unreleased)
+
+- Project-scoped stable toolchain installer, explicit compiler/core pin, build identity and release guard. Latest stable download is blocked by DNS; baseline remains 0.10.20.
+- Typed field-identity queries, canonical predicate-scoped cursors and source/target access explanations.
+- Workload checks replay frozen input into MoonLSM, compare target MoonLSM/FST and pagination, and enforce independent scan budgets. Data readiness and workload approval remain separate.
+- Snapshot reader module validates portable artifacts once, then serves pages without filesystem access. Device/weather consumers and 100-page measurements included.
+- SQLite business-field oracle, refreshed-digest corruption cases, report overwrite protection, one-command acceptance and candidate packaging.

@@ -1,3 +1,5 @@
+> 源码候选新增字段查询、explain、check-queries 和快照 SDK，见 [查询指南](QUERIES.md)。正式公开版本仍为 0.0.12。
+
 # Native file tool
 
 Download the matching Windows x64 or Linux x64 archive from GitHub Releases and unpack it. Windows uses orderkey.exe and Linux uses orderkey. The examples below use orderkey. Python is needed for the acceptance scripts, and Node.js for the historical JS fixtures.

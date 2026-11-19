@@ -13,38 +13,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: toolchain
+        shell: python
+        run: |
+          import json, os
+          with open('toolchain.json') as f: pin=json.load(f)['version']
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('version='+pin+'\n')
       - uses: hustcer/setup-moonbit@v1.22
+        with:
+          version: ${{ steps.toolchain.outputs.version }}
+          core-version: ${{ steps.toolchain.outputs.version }}
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - run: moon version --all
       - run: moon update
-      - run: moon test --deny-warn --target wasm .
-      - run: moon test --deny-warn --target wasm-gc .
-      - run: moon test --deny-warn --target js .
-      - run: moon test --deny-warn --target native .
-      - run: python examples/moonlsm/verify_sqlite.py --baseline
-      - run: python examples/moonlsm/verify_reindex.py --report reindex-report.json
-      - run: python scripts/test_reports.py
-      - run: python scripts/build.py
-      - run: python scripts/verify_cli.py --report cli-report.json
-      - run: python scripts/benchmark.py --report benchmark.json
+      - run: python scripts/acceptance.py
       - run: moon package --list
-      - run: python scripts/package.py
+      - run: python scripts/package.py --candidate
       - uses: actions/upload-artifact@v4
         with:
-          name: orderkey-${{ runner.os }}-x64
+          name: orderkey-${{ runner.os }}-x64-candidate
           path: _build/distribution/*.zip
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: failure-${{ runner.os }}
-          path: |
-            reindex-report.json
-            cli-report.json
-            benchmark.json
+          name: verification-${{ runner.os }}
+          path: _build/acceptance/*.json

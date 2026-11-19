@@ -62,6 +62,11 @@ def main():
                 "fst_bytes":(out/"target.fst").stat().st_size,
                 "platform":platform.platform(),"python":platform.python_version(),
                 "processor":platform.processor(),"manifest":json.loads((out/"manifest.json").read_text())}
+        consumer=ROOT/'_build/native/release/build/WeiR-h/orderkey_snapshot/examples/device'/('device.exe' if os.name=='nt' else 'device')
+        if consumer.exists():
+            output=subprocess.check_output([str(consumer),str(out),'--benchmark'],text=True,encoding='utf-8')
+            result['snapshot_reader']=json.loads(output.strip().splitlines()[-1])
+            if not result['snapshot_reader']['ready']:raise AssertionError('snapshot reader benchmark failed')
         args.report.write_text(json.dumps(result,indent=2)+"\n",encoding="utf-8")
         print(json.dumps({k:v for k,v in result.items() if k!="manifest"},indent=2))
 if __name__=="__main__": main()

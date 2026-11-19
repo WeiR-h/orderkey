@@ -21,3 +21,7 @@ OrderKey 的差异是用显式字段身份与代次约束索引和游标，对�
 - [moon-data-contract](https://mooncakes.io/docs/lyjttio/moon-data-contract@0.2.2) 处理业务数据契约和 Schema 演化。
 - [MigrationLens](https://mooncakes.io/docs/cn-xjr/migration_lens@0.1.0) 审查 SQL 迁移的执行上下文。
 - OrderKey 的实际演示覆盖读入编码 KV、构建与重开 MoonLSM、持久化并重载 MoonFST、终止进程与恢复后复验。
+
+## 2026-11-19 查询回归方向
+
+本轮对照 MoonKV 的有序分页、MigrationLens 的 PostgreSQL 迁移审查和 moon-data-contract 的 Schema 治理。OrderKey 新增的是冻结 KV 导出下、以字段身份表达的查询重放及扫描预算验收。范围不包含在线切换或 SQL DDL 审查。公开检索不构成不存在其他同类项目的证明。
