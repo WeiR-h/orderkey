@@ -30,6 +30,7 @@ def main():
            [sys.executable,'scripts/verify_delivery.py','--report',str(OUT/'delivery-report.json')],
            [sys.executable,'scripts/verify_capture.py','--report',str(OUT/'capture-report.json')],
            [sys.executable,'scripts/verify_audit.py','--report',str(OUT/'audit-report.json')],
+           [sys.executable,'scripts/verify_gate.py','--report',str(OUT/'gate-report.json')],
            [sys.executable,'scripts/verify_snapshot.py','--report',str(OUT/'snapshot-report.json')],
            [sys.executable,'scripts/verify_consumer.py','--report',str(OUT/'consumer-report.json')],
            [sys.executable,'scripts/benchmark.py','--report',str(OUT/'benchmark.json')],

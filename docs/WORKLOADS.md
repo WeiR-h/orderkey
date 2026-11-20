@@ -39,3 +39,27 @@ orderkey audit-layout --selection fleet-selection --batches examples/regression/
 示例在后续批次加入 360 条窗外记录。结果仍为 180 条，扫描从 1,230 条
 增加到 1,590 条，突破 1,500 条预算。审查只比较冻结导出。交付时仍用 build-selected
 验证实际文件并生成业务回执。
+
+## 发布判定
+
+~~~sh
+orderkey gate-selected --selection fleet-selection --selection-sha256 APPROVED_SHA256 --batches examples/regression/batches.json --delivery fleet-delivery --out gate-run
+~~~
+
+从已批准的配置提供方案摘要。用 `build-selected` 准备 `fleet-delivery`，报告目录每次用新名称。
+退出 0 表示交付与所有批次都通过，1 表示冻结查询退化，2 表示输入或交付物无效。
+报告里的交付查询为已重建数据的实测结果，各批扫描数为独立冻结导出的预测。
+以下 GitHub Actions 步骤可放在已有的下载和构建步骤之后。将 `ORDERKEY_SELECTION_SHA256` 配置在受信任的发布流程中。
+
+~~~yaml
+- name: Verify proposed index delivery
+  env:
+    APPROVED_SHA256: ${{ vars.ORDERKEY_SELECTION_SHA256 }}
+  run: |
+    ./orderkey gate-selected --selection selection --selection-sha256 "$APPROVED_SHA256" --batches batches.json --delivery delivery --out gate-run
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: orderkey-gate
+    path: gate-run/gate-report.json
+~~~
