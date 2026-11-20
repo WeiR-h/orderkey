@@ -10,11 +10,19 @@ from verify_cli import ROOT, run
 from verify_layouts import read_json, write_json
 
 
+def weather_binary():
+    directory = ROOT / "_build/native/release/build/WeiR-h/orderkey_snapshot/examples/weather_capture"
+    for name in ("weather_capture.exe", "weather_capture"):
+        path = directory / name
+        if path.is_file():
+            return path
+    raise FileNotFoundError(f"Native weather application is missing in {directory}")
+
+
 def weather_app():
     subprocess.run(["moon", "build", "--release", "--target", "native",
                     "snapshot/examples/weather_capture"], cwd=ROOT, check=True, timeout=180)
-    binary = "weather_capture.exe" if os.name == "nt" else "weather_capture"
-    return ROOT / "_build/native/release/build/WeiR-h/orderkey_snapshot/examples/weather_capture" / binary
+    return weather_binary()
 
 
 def call(app, *args):

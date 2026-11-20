@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 from verify_cli import ROOT, dataset, write_case
 from verify_layouts import workload, write_json
+from verify_capture import weather_binary
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -28,7 +29,7 @@ def main():
            "README.md":ROOT/"docs/CLI.md","DEMO.md":ROOT/"docs/DEMO.md","QUERIES.md":ROOT/"docs/QUERIES.md",
            "LAYOUTS.md":ROOT/"docs/LAYOUTS.md","WORKLOADS.md":ROOT/"docs/WORKLOADS.md","toolchain.json":ROOT/"toolchain.json"}
     weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
-    files[weather]=ROOT/"_build/native/release/build/WeiR-h/orderkey_snapshot/examples/weather_capture"/weather
+    files[weather]=weather_binary()
     files["examples/weather/noaa-ghcnd-2024-q1.csv"]=ROOT/"examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv"
     for module in ("PingGuoMiaoMiao/moonlsm","starAndHonor/fst","moonbitlang/async","gmlewis/sha256","gmlewis/base64"):
         path=ROOT/".mooncakes"/module/"LICENSE"
