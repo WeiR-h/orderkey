@@ -12,6 +12,7 @@ import zipfile
 from verify_cli import ROOT, dataset, write_case
 from verify_layouts import workload, write_json
 from verify_capture import weather_binary
+from verify_audit import cases as audit_cases
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -41,7 +42,7 @@ def main():
         files["third-party-licenses/moonbit-core-"+license_name+".txt"]=path
     for report in ("reindex-report.json","cli-report.json","benchmark.json","queries-report.json",
                    "snapshot-report.json","consumer-report.json","layouts-report.json","delivery-report.json",
-                   "capture-report.json",
+                   "capture-report.json","audit-report.json",
                    "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():
@@ -50,6 +51,12 @@ def main():
             files["verification/"+report]=ROOT/"_build/acceptance"/report
     with tempfile.TemporaryDirectory(prefix="orderkey-package-",dir=ROOT/"_build") as tmp:
         temp=Path(tmp)
+        regression=temp/"regression"
+        audit_cases(regression)
+        files["examples/regression/batches.json"]=regression/"batches.json"
+        for batch in ("training", "holdout"):
+            for leaf in ("source.json", "target.json", "input.jsonl", "layout-workload.json"):
+                files[f"examples/regression/{batch}/{leaf}"]=regression/batch/leaf
         for fixture,weather in (("telemetry",False),("weather",True)):
             base=temp/fixture
             write_case(base,dataset(weather),weather)

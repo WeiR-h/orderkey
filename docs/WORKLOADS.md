@@ -20,3 +20,20 @@ weather_capture query-selected weather-delivery USW00094846 20240201 20240301
 输入 ID 不参与合并。相同规范化谓词与分页参数共享稳定 ID，预算取最小值，
 policy.json 中的权重取调用次数。每次最多 100,000 次调用、100 个不同查询、64 MiB 输入、1 MiB 单行。
 超限时拆分采集批次。查询参数可能含业务标识，应按业务数据处理本地记录。
+
+## 复核后续批次
+
+~~~sh
+orderkey compare-layouts --input examples/regression/training/input.jsonl --source-contract examples/regression/training/source.json --queries examples/regression/training/layout-workload.json --candidate examples/regression/training/target.json --out fleet-selection
+orderkey audit-layout --selection fleet-selection --batches examples/regression/batches.json --out fleet-audit
+~~~
+
+批次文件使用 schema_version 1，batches 为 1–5 个带唯一 id 的项目。
+每项含 input、source_contract、queries 和可选 policy 路径。相对路径以批次文件所在目录为准。
+源契约必须与原选型一致。每批导出摘要必须不同，且与初次选型的导出不同。
+报告列出源布局和同一已选目标的精确范围扫描数、命中、逐查询预算与顺序约束。
+通过时退出码为 0。探测到退化或无效批次时非零退出，并保留 audit-report.json。
+
+示例在后续批次加入 360 条窗外记录。结果仍为 180 条，扫描从 1,230 条
+增加到 1,590 条，突破 1,500 条预算。审查只比较冻结导出。交付时仍用 build-selected
+验证实际文件并生成业务回执。
