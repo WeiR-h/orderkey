@@ -22,6 +22,7 @@ pub(all) struct Page {
 pub struct Reader {
   // private fields
 }
+pub fn Reader::contract(Self) -> @orderkey.IndexContract
 pub fn Reader::loaded_bytes(Self) -> Int64
 pub async fn Reader::open(String) -> Self
 pub async fn Reader::open_selected(String, expected_selection_sha256? : String) -> Self

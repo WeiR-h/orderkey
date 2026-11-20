@@ -26,7 +26,10 @@ def main():
     toolchain=Path(os.environ.get("MOON_HOME",Path.home()/".moon"))
     files={exe.name:exe,"LICENSE":ROOT/"LICENSE","THIRD_PARTY.md":ROOT/"THIRD_PARTY.md",
            "README.md":ROOT/"docs/CLI.md","DEMO.md":ROOT/"docs/DEMO.md","QUERIES.md":ROOT/"docs/QUERIES.md",
-           "LAYOUTS.md":ROOT/"docs/LAYOUTS.md","toolchain.json":ROOT/"toolchain.json"}
+           "LAYOUTS.md":ROOT/"docs/LAYOUTS.md","WORKLOADS.md":ROOT/"docs/WORKLOADS.md","toolchain.json":ROOT/"toolchain.json"}
+    weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
+    files[weather]=ROOT/"_build/native/release/build/WeiR-h/orderkey_snapshot/examples/weather_capture"/weather
+    files["examples/weather/noaa-ghcnd-2024-q1.csv"]=ROOT/"examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv"
     for module in ("PingGuoMiaoMiao/moonlsm","starAndHonor/fst","moonbitlang/async","gmlewis/sha256","gmlewis/base64"):
         path=ROOT/".mooncakes"/module/"LICENSE"
         if not path.is_file(): raise RuntimeError("dependency license missing: "+module)
@@ -37,6 +40,7 @@ def main():
         files["third-party-licenses/moonbit-core-"+license_name+".txt"]=path
     for report in ("reindex-report.json","cli-report.json","benchmark.json","queries-report.json",
                    "snapshot-report.json","consumer-report.json","layouts-report.json","delivery-report.json",
+                   "capture-report.json",
                    "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():

@@ -101,6 +101,10 @@ async fn execute(args : Array[String]) -> Unit {
     compare_layouts(args)
     return
   }
+  if command == "collect-queries" {
+    collect_queries(args)
+    return
+  }
   if command == "verify-delivery" {
     let options = layout_options(args, ["--out", "--selection-sha256"], [])
     let expected = options.paths
@@ -238,7 +242,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|build|resume|verify|verify-delivery|query|explain|check-queries|compare-layouts|build-selected --out DIR",
+      " version|plan|build|resume|verify|verify-delivery|query|explain|check-queries|collect-queries|compare-layouts|build-selected --out DIR",
     )
     return
   }

@@ -1,0 +1,14 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "WeiR-h/orderkey_snapshot/examples/weather_capture"
+
+// Values
+
+// Errors
+type WeatherError
+
+// Types and methods
+type Observation
+
+// Type aliases
+
+// Traits

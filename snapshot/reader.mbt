@@ -203,6 +203,11 @@ pub fn Reader::row_count(self : Reader) -> Int32 {
 }
 
 ///|
+pub fn Reader::contract(self : Reader) -> @orderkey.IndexContract {
+  self.contract
+}
+
+///|
 pub fn Reader::plan(
   self : Reader,
   query : @orderkey.QuerySpec,
