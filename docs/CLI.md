@@ -1,4 +1,4 @@
-> v0.1.4 提供布局比较、自动推荐、跨批审查和严格交付校验。 [布局选型指南](LAYOUTS.md) · [业务查询采集与跨批审查](WORKLOADS.md) · [字段查询和快照 SDK](QUERIES.md)
+> v0.1.8 提供双平台一键发布复验。 [演示与命令](DEMO.md) · [技术摘要](REVIEW.md) · [业务查询采集与跨批审查](WORKLOADS.md)
 
 # Native file tool
 

@@ -5,13 +5,38 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
+import time
 import zipfile
 
 from verify_audit import run_audit
 from verify_capture import weather_flow
 from verify_cli import run
 from verify_layouts import assert_measured, build_args, case_args, compare, read_json, write_json
+
+
+def verify_gate_replay(root):
+    started = time.perf_counter()
+    args = ["cmd", "/d", "/c", "replay-gate.cmd"] if os.name == "nt" else ["sh", "replay-gate.sh"]
+    subprocess.run([*args, "gate replay"], cwd=root, check=True, timeout=300,
+                   encoding="utf-8", capture_output=True)
+    out = root / "gate replay"
+    approval = (root / "examples/earthquakes/approved.sha256").read_text(encoding="ascii").strip()
+    passed = read_json(out / "near/gate-report.json")
+    denied = read_json(out / "late/gate-report.json")
+    assert passed["ready"] and not denied["ready"]
+    assert passed["selection_sha256"] == denied["selection_sha256"] == approval
+    assert passed["status"] == "passed" and denied["status"] == "regression"
+    assert passed["training_measured_queries"][0]["scanned"] == 33
+    assert read_json(out / "selection/comparison.json")["layouts"][0]["queries"][0]["scanned"] == 599
+    for report, count in ((passed, 45), (denied, 71)):
+        query, = report["batches"][0]["queries"]
+        assert (query["predicted_scanned"], query["matched"], query["budget"]) == (count, 33, 50)
+    assert read_json(out / "delivery-open.json")["ready"]
+    return {"ready": True, "seconds": time.perf_counter() - started,
+            "approved_selection_sha256": approval, "passed_scanned": 45,
+            "rejected_scanned": 71, "matched": 33, "budget": 50}
 
 
 def verify_current_cases(root, exe):
@@ -66,6 +91,7 @@ def verify_archive(path, parent):
         acceptance = read_json(root / "verification/acceptance.json")
         assert acceptance["ready"] and acceptance["build"] == version and not version["dirty"]
         assert hashlib.sha256(exe.read_bytes()).hexdigest() == acceptance["binary_sha256"]
+        gate_replay = verify_gate_replay(root)
         current = verify_current_cases(root, exe)
         cases = []
         for name, matches in (("telemetry", 18), ("weather", 29)):
@@ -93,7 +119,7 @@ def verify_archive(path, parent):
                                                  str(case / "where.json")]))["rows"]
             assert len(rows) == matches
             cases.append({"case": name, "rows": matches})
-    return {"ready": True, "build": version, "cases": cases, "adoption": current,
+    return {"ready": True, "build": version, "cases": cases, "adoption": current, "gate_replay": gate_replay,
             "archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
