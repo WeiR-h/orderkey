@@ -1,13 +1,16 @@
 """Compile the SDK's public API from a fresh local-source consumer module."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 import zipfile
 from verify_cli import ROOT,dataset,write_case,run
+from verify_earthquakes import cases as earthquake_cases
 from verify_layouts import build_args, case_args, workload, write_json
 
 def main():
@@ -24,7 +27,6 @@ def main():
         directory=Path(tmp);consumer=directory/'app';consumer.mkdir()
         env = os.environ.copy()
         if args.registry:
-            import shutil
             moon_home = Path(env.get('MOON_HOME', Path.home() / '.moon'))
             isolated_home = directory / 'moon-home'
             shutil.copytree(moon_home / 'lib', isolated_home / 'lib')
@@ -73,8 +75,28 @@ async fn main {
             subprocess.run(['moon', 'update'], cwd=consumer, env=env, check=True, timeout=180)
         subprocess.run(['moon', 'run', '--target', 'native', '.', '--', str(target)],
                        cwd=consumer, env=env, check=True, timeout=180)
+        earthquakes = directory / 'earthquakes'
+        earthquake_cases(earthquakes)
+        training = earthquakes / 'training'
+        selected, delivery = earthquakes / 'selection', earthquakes / 'delivery'
+        run(exe, 'compare-layouts', [*case_args(training), '--candidate',
+                                     str(training / 'target.json'), '--out', str(selected)])
+        approved = hashlib.sha256((selected / 'selection.json').read_bytes()).hexdigest()
+        run(exe, 'build-selected', build_args(training, selected, delivery))
+        (training / 'input.jsonl').rename(training / 'original-export.jsonl')
+        for name in ('moon.pkg', 'main.mbt'):
+            shutil.copyfile(ROOT / 'snapshot/examples/earthquakes' / name, consumer / name)
+        result = subprocess.check_output(['moon', 'run', '--target', 'native', '.', '--',
+                                          str(delivery), approved], cwd=consumer, env=env,
+                                         text=True, encoding='utf-8', timeout=180)
+        values = json.loads(result.strip().splitlines()[-1])
+        assert len(values) == 33
+        digest = hashlib.sha256('\n'.join(values).encode()).hexdigest()
+        oracle = json.loads((ROOT / '_build/acceptance/earthquakes-report.json').read_bytes())
+        assert digest == oracle['batches'][0]['ordered_result_sha256']
     args.report.write_text(json.dumps({
         'ready': True, 'weather_rows': 29,
+        'earthquake_rows': 33, 'earthquake_result_sha256': digest,
         'dependency_source': 'public Mooncakes' if args.registry else 'fresh module with packaged local SDK',
         'public_registry_install': args.registry,
     }) + '\n', encoding='utf-8')

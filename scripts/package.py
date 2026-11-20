@@ -13,6 +13,7 @@ from verify_cli import ROOT, dataset, write_case
 from verify_layouts import workload, write_json
 from verify_capture import weather_binary
 from verify_audit import cases as audit_cases
+from verify_earthquakes import CASE as EARTHQUAKES, cases as earthquake_cases
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -42,7 +43,7 @@ def main():
         files["third-party-licenses/moonbit-core-"+license_name+".txt"]=path
     for report in ("reindex-report.json","cli-report.json","benchmark.json","queries-report.json",
                    "snapshot-report.json","consumer-report.json","layouts-report.json","delivery-report.json",
-                   "capture-report.json","audit-report.json","gate-report.json",
+                   "capture-report.json","audit-report.json","gate-report.json","earthquakes-report.json",
                    "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():
@@ -51,6 +52,17 @@ def main():
             files["verification/"+report]=ROOT/"_build/acceptance"/report
     with tempfile.TemporaryDirectory(prefix="orderkey-package-",dir=ROOT/"_build") as tmp:
         temp=Path(tmp)
+        earthquakes = temp / "earthquakes"
+        earthquake_cases(earthquakes)
+        for path in earthquakes.rglob("*"):
+            if path.is_file():
+                files["examples/" + path.relative_to(temp).as_posix()] = path
+        for name in ("SOURCE.md", "events.tsv"):
+            files[f"examples/earthquakes/{name}"] = EARTHQUAKES / name
+        approved = json.loads((ROOT/"_build/acceptance/earthquakes-report.json").read_text())
+        approved_file = earthquakes / "approved.sha256"
+        approved_file.write_text(approved["approved_selection_sha256"] + "\n", encoding="ascii")
+        files["examples/earthquakes/approved.sha256"] = approved_file
         regression=temp/"regression"
         audit_cases(regression)
         files["examples/regression/batches.json"]=regression/"batches.json"
