@@ -30,6 +30,8 @@ orderkey audit-layout --selection fleet-selection --batches examples/regression/
 
 批次文件使用 schema_version 1，batches 为 1–5 个带唯一 id 的项目。
 每项含 input、source_contract、queries 和可选 policy 路径。相对路径以批次文件所在目录为准。
+发布复核使用 `audit-layout --locked`，各批查询文件和策略文件的字节摘要须与选型方案一致。
+选型时省略策略的方案要求各批也省略策略。更改预算或查询会返回 invalid。
 源契约必须与原选型一致。每批导出摘要必须不同，且与初次选型的导出不同。
 报告列出源布局和同一已选目标的精确范围扫描数、命中、逐查询预算与顺序约束。
 通过时退出码为 0。探测到退化或无效批次时非零退出，并保留 audit-report.json。

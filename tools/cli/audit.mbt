@@ -30,29 +30,16 @@ fn batch_options(parent : String, batch : Json) -> LayoutOptions raise {
 }
 
 ///|
-async fn audit_layout(args : Array[String]) -> Unit {
-  let options = layout_options(args, ["--selection", "--batches", "--out"], [])
-  let selection_dir = @fs.realpath(options.path("--selection"))
-  let batch_file = @fs.realpath(options.path("--batches"))
-  let parts = path_slashes(batch_file)
-    .split("/")
-    .map(part => part.to_owned())
-    .collect()
-  let parent = parts[:parts.length() - 1].to_owned().join("/")
-  let out = options.path("--out")
-  @fs.mkdir(out, allow_exist=false)
-  let report_path = out + "/audit-report.json"
+async fn audit_report(options : LayoutOptions, locked : Bool) -> Json {
   let reports = []
-  atomic_json(
-    report_path,
-    object([
-      ("schema_version", Json::number(1)),
-      ("ready", Json::boolean(false)),
-      ("status", Json::string("running")),
-      ("batches", Json::array(reports)),
-    ]),
-  )
-  let report = try {
+  try {
+    let selection_dir = @fs.realpath(options.path("--selection"))
+    let batch_file = @fs.realpath(options.path("--batches"))
+    let parts = path_slashes(batch_file)
+      .split("/")
+      .map(part => part.to_owned())
+      .collect()
+    let parent = parts[:parts.length() - 1].to_owned().join("/")
     let selected_raw = read(selection_dir + "/selection.json", maximum=1048576)
     let selected = @json.parse(
       @utf8.decode(selected_raw),
@@ -94,6 +81,13 @@ async fn audit_layout(args : Array[String]) -> Unit {
         let input = layout_input(paths)
         if field(input.digests, "source_contract_sha256") != source_digest {
           invalid("batch source contract differs from selected source")
+        }
+        if locked {
+          for name in ["workload_sha256", "policy_sha256"] {
+            if field(input.digests, name) != field(selected_digests, name) {
+              invalid("locked audit: " + name + " differs from selection")
+            }
+          }
         }
         let data_hash = field(input.digests, "input_sha256")
         if hashes.contains(data_hash) {
@@ -158,6 +152,7 @@ async fn audit_layout(args : Array[String]) -> Unit {
       ("schema_version", Json::number(1)),
       ("ready", Json::boolean(status == "passed")),
       ("status", Json::string(status)),
+      ("locked", Json::boolean(locked)),
       ("selection_sha256", Json::string(hash(selected_raw))),
       ("batches_sha256", Json::string(hash(raw))),
       ("target_contract_sha256", target_digest),
@@ -173,6 +168,26 @@ async fn audit_layout(args : Array[String]) -> Unit {
         ("batches", Json::array(reports)),
       ])
   }
+}
+
+///|
+async fn audit_layout(args : Array[String]) -> Unit {
+  let options = layout_options(args, ["--selection", "--batches", "--out"], [
+    "--locked",
+  ])
+  let out = options.path("--out")
+  @fs.mkdir(out, allow_exist=false)
+  let report_path = out + "/audit-report.json"
+  atomic_json(
+    report_path,
+    object([
+      ("schema_version", Json::number(1)),
+      ("ready", Json::boolean(false)),
+      ("status", Json::string("running")),
+      ("batches", Json::array([])),
+    ]),
+  )
+  let report = audit_report(options, options.switches.contains("--locked"))
   atomic_json(report_path, report)
   println(report.stringify())
   if field(report, "ready") != Json::boolean(true) {

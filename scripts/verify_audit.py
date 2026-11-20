@@ -32,9 +32,9 @@ def cases(base):
     return holdout, batch
 
 
-def run_audit(exe, selection, batches, output, success):
+def run_audit(exe, selection, batches, output, success, *, locked=False):
     run(exe, "audit-layout", ["--selection", str(selection), "--batches", str(batches),
-                               "--out", str(output)], success=success)
+                               "--out", str(output), *(["--locked"] if locked else [])], success=success)
     assert {f.name for f in output.iterdir()} == {"audit-report.json"}
     return read_json(output / "audit-report.json")
 
@@ -94,10 +94,34 @@ def verify_audit(exe, base):
     invalid = run_audit(exe, selection, batches, base / "invalid", False)
     assert [r["status"] for r in invalid["batches"]] == ["invalid", "regression", "invalid"]
     assert {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected} == before
+    write_json(batches, {"schema_version": 1, "batches": [healthy, batch]})
+    locked = run_audit(exe, selection, batches, base / "locked", False, locked=True)
+    assert [r["status"] for r in locked["batches"]] == ["passed", "regression"]
+    workload = read_json(holdout / "layout-workload.json")
+    q = workload["queries"][0]
+    write_json(base / "policy.json", {"allow_order_change": [q["id"]]})
+    for label, query in {
+        "budget": {**q, "max_target_scanned": 2000},
+        "predicate": {**q, "eq": {"device": {"bytes_hex": b"fan".hex()}}},
+        "missing": {**q, "id": "replacement"},
+        "policy": q,
+    }.items():
+        write_json(base / "changed.json", {**workload, "queries": [query]})
+        changed = {**batch, "queries": "changed.json"}
+        if label == "policy":
+            changed["policy"] = "policy.json"
+        write_json(batches, {"schema_version": 1, "batches": [changed]})
+        if label == "budget":
+            assert run_audit(exe, selection, batches, base / "unlocked-budget", True)["ready"]
+        rejected = run_audit(exe, selection, batches, base / f"locked-{label}", False, locked=True)
+        assert rejected["status"] == "invalid" and not rejected["ready"]
+        digest = "policy_sha256" if label == "policy" else "workload_sha256"
+        assert digest in rejected["batches"][0]["error"]
     return {"ready": True, "training_scanned": 1230, "holdout_scanned": 1590,
             "unchanged_matches": logical, "budget": 1500, "regression": report,
             "checks": ["zero-audit-databases", "full-batch-results", "wrong-contract",
-                       "repeated-export", "source-unchanged", "measured-by-moonlsm-and-sqlite"]}
+                       "repeated-export", "source-unchanged", "measured-by-moonlsm-and-sqlite",
+                       "locked-budget-predicate-query-policy"]}
 
 
 def main():
