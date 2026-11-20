@@ -25,7 +25,7 @@ def main():
     if not exe.is_file(): raise RuntimeError("build the native CLI first")
     destination=ROOT/"_build/distribution"
     destination.mkdir(exist_ok=True)
-    name="orderkey-"+version+("-candidate-" if options.candidate else "-")+("windows" if os.name=="nt" else "linux")+"-x64.zip"
+    archive_name="orderkey-"+version+("-candidate-" if options.candidate else "-")+("windows" if os.name=="nt" else "linux")+"-x64.zip"
     toolchain=Path(os.environ.get("MOON_HOME",Path.home()/".moon"))
     files={exe.name:exe,"LICENSE":ROOT/"LICENSE","THIRD_PARTY.md":ROOT/"THIRD_PARTY.md",
            "README.md":ROOT/"docs/CLI.md","DEMO.md":ROOT/"docs/DEMO.md","QUERIES.md":ROOT/"docs/QUERIES.md",
@@ -81,12 +81,12 @@ def main():
                 files["examples/telemetry/conflict-workload.json"] = base / 'conflict-workload.json'
             for leaf in ("source.json","target.json","input.jsonl","workload.json","where.json","layout-workload.json"):
                 files["examples/"+fixture+"/"+leaf]=base/leaf
-        with zipfile.ZipFile(destination/name,"w",zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(destination/archive_name,"w",zipfile.ZIP_DEFLATED) as archive:
             for target,path in sorted(files.items()):
                 archive.write(path,target)
             lines=[]
             for target,path in sorted(files.items()):
                 lines.append(hashlib.sha256(path.read_bytes()).hexdigest()+"  "+target)
             archive.writestr("SHA256SUMS.txt","\n".join(lines)+"\n")
-    print(destination/name)
+    print(destination/archive_name)
 if __name__=="__main__": main()
