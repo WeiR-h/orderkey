@@ -29,7 +29,10 @@ def main():
     toolchain=Path(os.environ.get("MOON_HOME",Path.home()/".moon"))
     files={exe.name:exe,"LICENSE":ROOT/"LICENSE","THIRD_PARTY.md":ROOT/"THIRD_PARTY.md",
            "README.md":ROOT/"docs/CLI.md","DEMO.md":ROOT/"docs/DEMO.md","QUERIES.md":ROOT/"docs/QUERIES.md",
-           "LAYOUTS.md":ROOT/"docs/LAYOUTS.md","WORKLOADS.md":ROOT/"docs/WORKLOADS.md","toolchain.json":ROOT/"toolchain.json"}
+           "LAYOUTS.md":ROOT/"docs/LAYOUTS.md","WORKLOADS.md":ROOT/"docs/WORKLOADS.md",
+           "REVIEW.md":ROOT/"docs/REVIEW.md","toolchain.json":ROOT/"toolchain.json"}
+    replay = "replay-gate.cmd" if os.name == "nt" else "replay-gate.sh"
+    files[replay] = EARTHQUAKES / replay
     weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
     files[weather]=weather_binary()
     files["examples/weather/noaa-ghcnd-2024-q1.csv"]=ROOT/"examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv"
@@ -59,6 +62,8 @@ def main():
                 files["examples/" + path.relative_to(temp).as_posix()] = path
         for name in ("SOURCE.md", "events.tsv"):
             files[f"examples/earthquakes/{name}"] = EARTHQUAKES / name
+        for name in ("main.mbt", "moon.pkg"):
+            files[f"examples/earthquakes/consumer/{name}"] = ROOT / "snapshot/examples/earthquakes" / name
         approved = json.loads((ROOT/"_build/acceptance/earthquakes-report.json").read_text())
         approved_file = earthquakes / "approved.sha256"
         approved_file.write_text(approved["approved_selection_sha256"] + "\n", encoding="ascii")

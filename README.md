@@ -1,10 +1,10 @@
 # OrderKey
 
-**v0.1.4 串起业务查询采集、布局选型、跨批审查和快照交付。** 从应用记录生成选型输入，比较扫描预算及返回顺序，再重建推荐布局。后续导出可以直接复核预算，接收方可以独立验证验收回执与快照并开始分页查询。 [一键复验与演示](docs/DEMO.md) · [业务查询与跨批审查](docs/WORKLOADS.md) · [布局选型指南](docs/LAYOUTS.md)
+**OrderKey 在有序 KV 复合索引发布前拦住扫描退化。** USGS 案例里的同一查询始终命中 33 条。后续批次扫描 45 条通过，扫描 71 条时超过 50 条预算，发布判定拒绝。 [下载 Windows / Linux 复验包](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.8) · [技术摘要](docs/REVIEW.md) · [一键复验与演示](docs/DEMO.md)
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
-各版本交付见 [CHANGELOG.md](CHANGELOG.md)，Windows 与 Linux 程序及复验报告随 [GitHub Releases](https://github.com/WeiR-h/orderkey/releases) 提供。v0.1.4 沿用 v1 键格式。
+各版本交付见 [CHANGELOG.md](CHANGELOG.md)，Windows 与 Linux 程序及复验报告随 [GitHub Releases](https://github.com/WeiR-h/orderkey/releases) 提供。
 
 ## 复现
 
@@ -42,11 +42,11 @@ python scripts/benchmark.py --report benchmark.json
 
 ## 使用示例
 
-从 Mooncakes 安装 v0.1.4 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
+从 Mooncakes 安装 v0.1.8 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
 
 ```sh
-moon add WeiR-h/orderkey@0.1.4
-moon add WeiR-h/orderkey_snapshot@0.1.4
+moon add WeiR-h/orderkey@0.1.8
+moon add WeiR-h/orderkey_snapshot@0.1.8
 ```
 
 在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。

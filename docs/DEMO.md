@@ -1,5 +1,22 @@
 # 约 90 秒演示
 
+## v0.1.8 评审复验
+
+解压对应平台 ZIP 后，在目录里运行 `replay-gate.cmd`（Windows）或 `sh replay-gate.sh`（Linux）。
+可传入一个新的输出目录作为第一个参数，默认是 `gate-replay`。
+
+| 时间 | 展示 |
+|---|---|
+| 0–20 秒 | 看初选报告，源扫描 599 条。换成网络前导布局后扫描 33 条。 |
+| 20–45 秒 | 打开后续批次报告。查询和预算锁定，45 条扫描通过 50 条预算。 |
+| 45–70 秒 | 后续一批命中仍为 33 条，扫描 71 条。展示拒绝报告和超预算 21 条。 |
+| 70–90 秒 | 核对交付快照的严格打开结果，展示 MoonLSM、MoonFST、SQLite 的对照证据。 |
+
+报告位于 `gate-replay/selection/comparison.json`、`gate-replay/near/gate-report.json` 和 `gate-replay/late/gate-report.json`。
+严格交付复核写到 `gate-replay/delivery-open.json`。发行包内 `verification/earthquakes-report.json` 保存两引擎实测与结果序列摘要。
+
+## v0.1.4 跨批审查演示
+
 从 Windows 或 Linux 压缩包解压到新目录。用 [业务查询与跨批审查](WORKLOADS.md) 中的命令事先准备三个案例。报告与程序由同一源码提交生成。
 
 | 时间 | 展示 |
