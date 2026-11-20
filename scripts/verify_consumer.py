@@ -43,7 +43,7 @@ def main():
         )
         (consumer/'main.mbt').write_text(r'''
 async fn main {
-  let reader = @snapshot.Reader::open(@env.args()[1])
+  let reader = @snapshot.Reader::open_selected(@env.args()[1])
   let query = @key.QuerySpec::new(
     [(b"tenant", Binary(b"ghcnd")), (b"device", Binary(b"USW00094846"))],
     Some((b"time", Some(Signed(20240201L)), Some(Signed(20240301L)))),

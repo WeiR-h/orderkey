@@ -68,6 +68,26 @@ def fixture_rows():
     ]
 
 
+def fixture_queries():
+    queries = []
+    expected = {}
+    for device in range(37, 47):
+        query = {"id": f"device-{device}", "eq": {"device": {"bytes_hex": f"d{device}".encode().hex()}},
+                 "max_target_scanned": 100, "page_size": 11}
+        queries.append(query)
+        expected[query["id"]] = (100, 100)
+        if device < 42:
+            window = {"field": "time", "lower": {"int64": "-50000"}, "upper": {"int64": "-45000"}}
+            tenant = {"bytes_hex": f"t{device}".encode().hex()}
+            exact = {**query, "id": f"history-{device}", "range": window,
+                     "eq": {**query["eq"], "tenant": tenant}, "max_target_scanned": 5}
+            residual = {**query, "id": f"fleet-window-{device}", "range": window}
+            queries.extend((exact, residual))
+            expected[exact["id"]] = (5, 5)
+            expected[residual["id"]] = (100, 5)
+    return queries, expected
+
+
 def benchmark(exe, base):
     case = base / "input"
     args = write_case(case, fixture_rows())
@@ -84,11 +104,8 @@ def benchmark(exe, base):
         path = case / f"layout-{ordinal}.json"
         write_json(path, candidate)
         paths.append(path)
-    write_json(case / "layout-workload.json", {
-        "schema_version": 1,
-        "queries": [{"id": "by-device", "eq": {"device": {"bytes_hex": b"d37".hex()}},
-                     "max_target_scanned": 100, "page_size": 11}],
-    })
+    queries, expected = fixture_queries()
+    write_json(case / "layout-workload.json", {"schema_version": 1, "queries": queries})
     reference = base / "all-builds"
     reference.mkdir()
     baseline = []
@@ -110,13 +127,16 @@ def benchmark(exe, base):
                       [comparison, selected])
     stats = read_json(comparison / "comparison.json")
     assert len(stats["layouts"]) == 9 and stats["rows"] == 100000
-    assert stats["layouts"][0]["queries"][0]["scanned"] == 100000
-    assert assert_measured(stats, read_json(selected / "selection-report.json")) == [
-        ("by-device", 100, 100)
-    ]
+    source_scans = {q["id"]: q["scanned"] for q in stats["layouts"][0]["queries"]}
+    assert source_scans["device-37"] == 100000
+    receipt = read_json(selected / "selection-report.json")
+    checked = assert_measured(stats, receipt)
+    assert len(checked) == len(expected) == 20
+    assert {key: (scanned, matches) for key, scanned, matches in checked} == expected
+    run_queries = {q["id"]: q for q in receipt["workload"]["queries"]}
     assert len(list(reference.glob("*/db"))) == 8 and (selected / "db").is_dir()
     return {
-        "ready": True, "rows": 100000, "target_layouts": 8, "queries": 1,
+        "ready": True, "rows": 100000, "target_layouts": 8, "queries": len(queries),
         "platform": platform.platform(),
         "metric_notes": "RSS is the largest child peak; disk is sampled output directory bytes "
                         "every 25 ms, including kept reference databases and temporary verification copies.",
@@ -131,7 +151,13 @@ def benchmark(exe, base):
             "peak_rss_bytes": max(compared[1], rebuilt[1]),
             "sampled_peak_output_bytes": max(compared[2], rebuilt[2]),
         },
-        "workload": {"source_scanned": 100000, "predicted": 100, "measured": 100},
+        "workload": [
+            {"id": key, "source_scanned": source_scans[key], "predicted": scanned,
+             "moonlsm_scanned": run_queries[key]["target_scanned"],
+             "moonfst_scanned": run_queries[key]["fst_scanned"], "matches": matches,
+             "pagination_match": run_queries[key]["pagination_match"]}
+            for key, scanned, matches in checked
+        ],
     }
 
 
