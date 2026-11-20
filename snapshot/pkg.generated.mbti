@@ -24,6 +24,7 @@ pub struct Reader {
 }
 pub fn Reader::loaded_bytes(Self) -> Int64
 pub async fn Reader::open(String) -> Self
+pub async fn Reader::open_selected(String, expected_selection_sha256? : String) -> Self
 pub fn Reader::plan(Self, @orderkey.QuerySpec) -> @orderkey.QueryPlan raise
 pub fn Reader::query(Self, @orderkey.QuerySpec, limit? : Int32, cursor? : Bytes?) -> Page raise
 pub fn Reader::row_count(Self) -> Int32

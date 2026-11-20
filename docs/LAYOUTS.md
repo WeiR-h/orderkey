@@ -42,6 +42,12 @@ orderkey query --out telemetry-selected --where examples/telemetry/where.json --
 
 把上述命令中的 `telemetry` 换成 `weather`，可用 273 条 NOAA 数据重建天气快照。示例查询返回 29 条，现有 `Reader::open` 可以查询重建后的目录。一个页面的游标按索引契约、快照与查询作用域校验。
 
+交付选型结果时，用 `orderkey verify-delivery --out telemetry-selected`
+验证文件与业务回执，或在应用内一次调用 `Reader::open_selected`。
+部署方可用 `--selection-sha256` 指定选型方案的预期摘要。
+接收方只需候选目录中的清单、文件、数据回执、选型任务和选型回执。
+回执用于一致性检查，来源认证由交付渠道负责。
+
 ## 开发者复验
 
 ~~~sh

@@ -101,6 +101,25 @@ async fn execute(args : Array[String]) -> Unit {
     compare_layouts(args)
     return
   }
+  if command == "verify-delivery" {
+    let options = layout_options(args, ["--out", "--selection-sha256"], [])
+    let expected = options.paths
+      .get("--selection-sha256")
+      .map(paths => paths[0])
+    let reader = @snapshot.Reader::open_selected(
+      options.path("--out"),
+      expected_selection_sha256?=expected,
+    )
+    println(
+      object([
+        ("schema_version", Json::number(1)),
+        ("ready", Json::boolean(true)),
+        ("cutover_ready", Json::boolean(true)),
+        ("rows", Json::number(reader.row_count().to_double())),
+      ]).stringify(),
+    )
+    return
+  }
   if ![
       "plan", "build", "resume", "verify", "query", "check-queries", "build-selected",
     ].contains(command) {
@@ -219,7 +238,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|build|resume|verify|query|explain|check-queries|compare-layouts|build-selected --input FILE --source-contract FILE --target-contract FILE --out DIR",
+      " version|plan|build|resume|verify|verify-delivery|query|explain|check-queries|compare-layouts|build-selected --out DIR",
     )
     return
   }
