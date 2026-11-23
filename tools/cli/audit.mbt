@@ -30,20 +30,47 @@ fn batch_options(parent : String, batch : Json) -> LayoutOptions raise {
 }
 
 ///|
+fn batch_parent(batch_file : String) -> String {
+  let parts = path_slashes(batch_file)
+    .split("/")
+    .map(part => part.to_owned())
+    .collect()
+  parts[:parts.length() - 1].to_owned().join("/")
+}
+
+///|
+fn batch_inventory(raw : Bytes) -> Array[Json] raise {
+  let descriptor = @json.parse(@utf8.decode(raw), reject_duplicate_keys=true)
+  only_fields(descriptor, ["schema_version", "batches"])
+  guard field(descriptor, "schema_version") == Json::number(1) &&
+    field(descriptor, "batches") is Array(batches) &&
+    !batches.is_empty() &&
+    batches.length() <= 5 else {
+    raise Invalid("audit requires schema version 1 and 1..5 batches")
+  }
+  let ids : Map[String, Unit] = Map([])
+  for batch in batches {
+    let id = text(field(batch, "id"))
+    if id == "" || ids.contains(id) {
+      invalid("empty or repeated batch id: " + id)
+    }
+    ids[id] = ()
+  }
+  batches
+}
+
+///|
 async fn audit_report(
   options : LayoutOptions,
   locked : Bool,
   segmented~ : Bool = false,
+  only_batch~ : String? = None,
 ) -> Json {
   let reports = []
   try {
     let selection_dir = @fs.realpath(options.path("--selection"))
     let batch_file = @fs.realpath(options.path("--batches"))
-    let parts = path_slashes(batch_file)
-      .split("/")
-      .map(part => part.to_owned())
-      .collect()
-    let parent = parts[:parts.length() - 1].to_owned().join("/")
+    let parent = batch_parent(batch_file)
     let selected_raw = read(selection_dir + "/selection.json", maximum=1048576)
     let selected = @json.parse(
       @utf8.decode(selected_raw),
@@ -61,25 +88,16 @@ async fn audit_report(
     let selected_digests = field(selected, "digests")
     let source_digest = field(selected_digests, "source_contract_sha256")
     let raw = read(batch_file, maximum=1048576)
-    let descriptor = @json.parse(@utf8.decode(raw), reject_duplicate_keys=true)
-    only_fields(descriptor, ["schema_version", "batches"])
-    guard field(descriptor, "schema_version") == Json::number(1) &&
-      field(descriptor, "batches") is Array(batches) &&
-      !batches.is_empty() &&
-      batches.length() <= 5 else {
-      raise Invalid("audit requires schema version 1 and 1..5 batches")
-    }
-    let ids : Map[String, Unit] = Map([])
+    let batches = batch_inventory(raw)
     let verified_inputs : Array[(LayoutOptions, Json)] = []
     let hashes = [field(selected_digests, "input_sha256")]
     let mut regression = false
     let mut malformed = false
     for batch in batches {
       let id = text(field(batch, "id"))
-      if id == "" || ids.contains(id) {
-        invalid("empty or repeated batch id: " + id)
+      if only_batch is Some(wanted) && id != wanted {
+        continue
       }
-      ids[id] = ()
       try {
         let paths = batch_options(parent, batch)
         let input = layout_input(paths)
@@ -134,6 +152,9 @@ async fn audit_report(
           )
         }
       }
+    }
+    if reports.is_empty() {
+      invalid("unknown batch id")
     }
     for (paths, digests) in verified_inputs {
       if layout_digests(paths) != digests {

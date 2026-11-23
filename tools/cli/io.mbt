@@ -4,6 +4,20 @@ suberror CliError {
 }
 
 ///|
+async fn lock_job(dir : String) -> @fs.File {
+  let path = dir + "/.lock"
+  if @fs.exists(path) && @fs.kind(path, follow_symlink=false) != @fs.Regular {
+    invalid("invalid job lock")
+  }
+  let lock = @fs.open(path, mode=ReadWrite, create_mode=OpenOrCreate)
+  errdefer lock.close()
+  if !lock.try_lock(Exclusive) {
+    invalid("job is locked")
+  }
+  lock
+}
+
+///|
 fn invalid(message : String) -> Unit raise {
   raise Invalid(message)
 }

@@ -77,3 +77,17 @@ orderkey gate-selected --selection fleet-selection --selection-sha256 APPROVED_S
     name: orderkey-gate
     path: gate-run/gate-report.json
 ~~~
+
+## 末批快照验收
+
+用 `build` 将指定批次的导出重建到独立目录，目标契约使用已批准选型的
+`target.contract`。用 `gate-batch` 验收该目录。
+
+~~~sh
+orderkey gate-batch --selection selection --selection-sha256 APPROVED_SHA256 --batches examples/earthquakes/late.json --batch-id late --delivery late-index --scan-mode segmented --out late-gate
+~~~
+
+`batch-receipt.json` 绑定批次输入、查询、策略、契约和候选文件清单。
+每条查询记录预算、页大小、预测和实测候选行数，以及按返回顺序编码的键与载荷摘要。
+命令需要新的回执目录。退出 0 表示通过，1 表示预算或顺序约束未通过，2 表示输入、交付物或复验无效。
+USGS 末批的同一个候选包含 1,516 条记录。单段实测扫描 71 条，分段实测扫描 33 条，两种模式均命中 33 条。

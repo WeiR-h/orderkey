@@ -113,6 +113,10 @@ async fn execute(args : Array[String]) -> Unit {
     gate_selected(args)
     return
   }
+  if command == "gate-batch" {
+    gate_batch(args)
+    return
+  }
   if command == "verify-delivery" {
     let options = layout_options(args, ["--out", "--selection-sha256"], [])
     let expected = options.paths
@@ -165,16 +169,8 @@ async fn execute(args : Array[String]) -> Unit {
     invalid("expected job directory")
   }
   let dir = @fs.realpath(dir)
-  let lock_path = dir + "/.lock"
-  if @fs.exists(lock_path) &&
-    @fs.kind(lock_path, follow_symlink=false) != @fs.Regular {
-    invalid("invalid job lock")
-  }
-  let lock = @fs.open(lock_path, mode=ReadWrite, create_mode=OpenOrCreate)
+  let lock = lock_job(dir)
   defer lock.close()
-  if !lock.try_lock(Exclusive) {
-    invalid("job is locked")
-  }
   if selected is Some(selection) {
     build_selected(args, dir, selection)
     return
@@ -253,7 +249,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|build|resume|verify|verify-delivery|query|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected --out DIR",
+      " version|plan|build|resume|verify|verify-delivery|query|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
     )
     return
   }

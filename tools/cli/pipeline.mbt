@@ -204,7 +204,11 @@ async fn check_hashes(dir : String, manifest : Json) -> Unit {
 }
 
 ///|
-async fn verify_contents(dir : String, input : Input) -> Unit {
+async fn verify_contents(
+  dir : String,
+  input : Input,
+  scratch_root~ : String = dir,
+) -> Unit {
   let rows = parse_rows(read(dir + "/records.jsonl"))
   same_rows(rows, target_rows(input))
   input.source.require_same(read(dir + "/source.contract"))
@@ -224,10 +228,10 @@ async fn verify_contents(dir : String, input : Input) -> Unit {
   // Db::open may create metadata. Verify a private copy instead of changing
   // the immutable candidate database.
   let mut number = 0
-  while @fs.exists(dir + "/check-" + number.to_string()) {
+  while @fs.exists(scratch_root + "/check-" + number.to_string()) {
     number += 1
   }
-  let check_dir = dir + "/check-" + number.to_string()
+  let check_dir = scratch_root + "/check-" + number.to_string()
   @fs.mkdir(check_dir)
   @fs.mkdir(check_dir + "/sst")
   @fs.mkdir(check_dir + "/wal")

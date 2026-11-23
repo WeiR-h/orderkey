@@ -77,24 +77,71 @@ fn positive_integer(
 }
 
 ///|
+fn measured_rows_sha256(rows : Array[Row]) -> String {
+  let digest = @sha256.Digest::new()
+  for row in rows {
+    for bytes in [row.key, row.value] {
+      let length = bytes.length()
+      for shift in [24, 16, 8, 0] {
+        digest.write(((length >> shift) & 255).to_byte())
+      }
+      for byte in bytes {
+        digest.write(byte)
+      }
+    }
+  }
+  digest.check_sum()
+}
+
+///|
 async fn workload(
   args : Array[String],
   dir : String,
   replay_source~ : Bool = true,
   segmented~ : Bool = false,
 ) -> Json {
+  let input = persisted_input(dir)
+  let path = option(args, "--queries")
+  let raw = read(path, maximum=1048576)
+  let measured = measure_workload(
+    dir,
+    input,
+    raw,
+    dir,
+    replay_source~,
+    segmented~,
+  )
+  if persisted_input(dir).fingerprint != input.fingerprint ||
+    read(path, maximum=1048576) != raw {
+    invalid("input or workload changed during verification")
+  }
+  measured
+}
+
+///|
+async fn measure_workload(
+  dir : String,
+  input : Input,
+  raw : Bytes,
+  scratch_root : String,
+  replay_source~ : Bool = true,
+  segmented~ : Bool = false,
+  evidence~ : Bool = false,
+) -> Json {
   let manifest = require_ready(dir)
   let manifest_hash = hash(read(dir + "/manifest.json"))
-  let input = persisted_input(dir)
-  verify_contents(dir, input)
-  let raw = read(option(args, "--queries"), maximum=1048576)
+  if field(manifest, "fingerprint") != Json::string(input.fingerprint) ||
+    field(manifest, "source_sha256") != Json::string(hash(input.raw)) {
+    invalid("delivery belongs to another frozen export or contract")
+  }
+  verify_contents(dir, input, scratch_root~)
   let queries = parse_workload(raw)
   // Private copies: opening MoonLSM can change metadata.
   let mut ordinal = 0
-  while @fs.exists(dir + "/probe-" + ordinal.to_string()) {
+  while @fs.exists(scratch_root + "/probe-" + ordinal.to_string()) {
     ordinal += 1
   }
-  let scratch = dir + "/probe-" + ordinal.to_string()
+  let scratch = scratch_root + "/probe-" + ordinal.to_string()
   @fs.mkdir(scratch)
   defer @fs.rmdir(scratch, recursive=true)
   if replay_source {
@@ -229,16 +276,23 @@ async fn workload(
           ] +
           scan
           .map(info => [("segmented_scan", segmented_scan_json(info))])
-          .unwrap_or([]),
+          .unwrap_or([]) +
+          (if evidence {
+            [
+              ("page_size", Json::number(page_size.to_double())),
+              (
+                "ordered_result_sha256",
+                Json::string(measured_rows_sha256(pages)),
+              ),
+            ]
+          } else {
+            []
+          }),
         ),
       )
     } catch {
       error => raise Invalid("query " + id + ": " + error_message(error))
     }
-  }
-  if persisted_input(dir).fingerprint != input.fingerprint ||
-    hash(read(option(args, "--queries"), maximum=1048576)) != hash(raw) {
-    invalid("input or workload changed during verification")
   }
   require_ready(dir) |> ignore
   if hash(read(dir + "/manifest.json")) != manifest_hash {
