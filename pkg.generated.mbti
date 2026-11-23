@@ -108,6 +108,7 @@ pub fn QueryPlan::access(Self) -> String
 pub fn QueryPlan::byte_range(Self) -> ByteRange
 pub fn QueryPlan::matches(Self, Bytes) -> Bool raise KeyError
 pub fn QueryPlan::prefix_fields(Self) -> Int32
+pub fn QueryPlan::pushdown_fields(Self) -> (Array[Bytes], Bytes?, Array[Bytes])
 pub fn QueryPlan::residual_fields(Self) -> Int32
 
 pub struct QuerySpec {

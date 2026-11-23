@@ -353,6 +353,12 @@ fn evaluate_layout(
             },
           ),
           ("budget", Json::number(query.budget.to_double())),
+          (
+            "over_budget_by",
+            Json::number(
+              (if scanned > query.budget { scanned - query.budget } else { 0 }).to_double(),
+            ),
+          ),
           ("weight", Json::number(query.weight.to_double())),
           ("order_changed", Json::boolean(changed)),
           ("failures", Json::array(failures)),

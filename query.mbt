@@ -133,6 +133,26 @@ pub fn QueryPlan::residual_fields(self : QueryPlan) -> Int32 {
 }
 
 ///|
+/// Field identities in index order, the field blocking range pushdown, and residual predicates.
+pub fn QueryPlan::pushdown_fields(
+  self : QueryPlan,
+) -> (Array[Bytes], Bytes?, Array[Bytes]) {
+  let fields = self.contract.fields()
+  let leading = fields[:self.prefix_count].to_owned().map(field => field.0)
+  let residual = self.query.equalities
+    .filter(pair => !leading.contains(pair.0))
+    .map(pair => pair.0)
+  let blocked = match self.query.interval {
+    Some((id, _, _)) if !self.pushed_range => {
+      residual.push(id)
+      Some(fields[self.prefix_count].0)
+    }
+    _ => None
+  }
+  (leading, blocked, residual)
+}
+
+///|
 pub fn QueryPlan::access(self : QueryPlan) -> String {
   if self.pushed_range {
     "range"

@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 
 from verify_cli import ROOT, key, run
+from verify_audit import run_audit
 from verify_gate import gate
 from verify_layouts import assert_measured, build_args, case_args, compare, read_json, write_json
 
@@ -88,6 +89,15 @@ def verify_earthquakes(exe, base):
     comparison = compare(exe, training, selection, ["--candidate", str(training / "target.json")])
     assert comparison["layouts"][0]["queries"][0]["scanned"] == 599
     approved = hashlib.sha256((selection / "selection.json").read_bytes()).hexdigest()
+    diagnostic = json.loads(run(exe, "explain", ["--where", str(training / "where.json"),
+        "--source-contract", str(training / "source.json"), "--target-contract", str(training / "target.json")]))
+    plan = diagnostic["target"]
+    assert plan["prefix_field_ids_hex"] == [b"network".hex()]
+    assert plan["blocking_field_id_hex"] == b"event_type".hex()
+    assert plan["residual_field_ids_hex"] == [b"time".hex()]
+    late = run_audit(exe, selection, base / "late.json", base / "late-diagnosis", False, locked=True)
+    failure, = late["batches"][0]["target"]["queries"]
+    assert (failure["scanned"], failure["residual_filtered"], failure["over_budget_by"]) == (71, 38, 21)
     receipt = json.loads(run(exe, "build-selected", build_args(training, selection, delivery)))
     assert assert_measured(comparison, receipt) == [("ak-week", 33, 33)]
     reports = []
@@ -118,6 +128,7 @@ def verify_earthquakes(exe, base):
                         "ordered_result_sha256": compare_order(exe, directory, by_batch[name], target)})
     assert len({r["ordered_result_sha256"] for r in reports}) == 1
     return {"ready": True, "baseline_scanned": 599, "approved_selection_sha256": approved,
+            "late_diagnosis": failure,
             "batches": reports}
 
 

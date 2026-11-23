@@ -59,10 +59,23 @@ fn parse_query(value : Json) -> @orderkey.QuerySpec raise {
 
 ///|
 fn plan_json(plan : @orderkey.QueryPlan) -> Json {
+  let (leading, blocked, residual) = plan.pushdown_fields()
   object([
     ("access", Json::string(plan.access())),
     ("prefix_fields", Json::number(plan.prefix_fields().to_double())),
     ("residual_fields", Json::number(plan.residual_fields().to_double())),
+    (
+      "prefix_field_ids_hex",
+      Json::array(leading.map(id => Json::string(hex(id)))),
+    ),
+    (
+      "blocking_field_id_hex",
+      blocked.map(id => Json::string(hex(id))).unwrap_or(Json::null()),
+    ),
+    (
+      "residual_field_ids_hex",
+      Json::array(residual.map(id => Json::string(hex(id)))),
+    ),
     (
       "byte_range",
       match plan.byte_range() {

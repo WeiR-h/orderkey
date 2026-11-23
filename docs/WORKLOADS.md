@@ -42,6 +42,10 @@ orderkey audit-layout --selection fleet-selection --batches examples/regression/
 
 ## 发布判定
 
+用 `explain --where FILE --source-contract FILE --target-contract FILE` 查看类型化范围。
+报告用十六进制表示字段 ID，可表达任何二进制字段名。USGS 案例的目标布局固定 `network`，
+`event_type` 阻挡 `time` 区间下推，末批单段扫描 71 条、过滤 38 条、超预算 21 条。
+
 ~~~sh
 orderkey gate-selected --selection fleet-selection --selection-sha256 APPROVED_SHA256 --batches examples/regression/batches.json --delivery fleet-delivery --out gate-run
 ~~~
