@@ -4,3 +4,5 @@
 /examples/earthquakes/replay-gate.cmd text eol=crlf
 /examples/earthquakes/replay-segmented.sh text eol=lf
 /examples/earthquakes/replay-segmented.cmd text eol=crlf
+/examples/earthquakes/replay-approved.sh text eol=lf
+/examples/earthquakes/replay-approved.cmd text eol=crlf

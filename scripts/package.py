@@ -14,6 +14,7 @@ from verify_layouts import workload, write_json
 from verify_capture import weather_binary
 from verify_audit import cases as audit_cases
 from verify_earthquakes import CASE as EARTHQUAKES, cases as earthquake_cases
+from verify_approved_consumer import CONSUMER
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -35,6 +36,9 @@ def main():
     files[replay] = EARTHQUAKES / replay
     segmented = "replay-segmented.cmd" if os.name == "nt" else "replay-segmented.sh"
     files[segmented] = EARTHQUAKES / segmented
+    approved_replay = "replay-approved.cmd" if os.name == "nt" else "replay-approved.sh"
+    files[approved_replay] = EARTHQUAKES / approved_replay
+    files[CONSUMER] = ROOT / "_build/bin" / CONSUMER
     weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
     files[weather]=weather_binary()
     files["examples/weather/noaa-ghcnd-2024-q1.csv"]=ROOT/"examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv"
@@ -67,6 +71,7 @@ def main():
             files[f"examples/earthquakes/{name}"] = EARTHQUAKES / name
         for name in ("main.mbt", "moon.pkg"):
             files[f"examples/earthquakes/consumer/{name}"] = ROOT / "snapshot/examples/earthquakes" / name
+            files[f"examples/earthquakes/approved-consumer/{name}"] = ROOT / "snapshot/examples/approved" / name
         approved = json.loads((ROOT/"_build/acceptance/earthquakes-report.json").read_text())
         approved_file = earthquakes / "approved.sha256"
         approved_file.write_text(approved["approved_selection_sha256"] + "\n", encoding="ascii")

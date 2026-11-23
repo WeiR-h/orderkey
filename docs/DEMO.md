@@ -1,5 +1,22 @@
 # 约 90 秒演示
 
+## v0.1.16 验收并读取同一份快照
+
+解压对应平台 ZIP。Windows 运行 `replay-approved.cmd`，Linux 运行
+`sh replay-approved.sh`。默认输出到 `approved-replay`，也可传入一个新的目录名。
+
+| 时间 | 展示 | 复验证据 |
+|---|---|---|
+| 0–14 秒 | 从冻结输入重建 USGS 末批的 1,516 条记录 | `late-index/manifest.json` |
+| 14–30 秒 | 单段扫描 71 条，超过 50 条预算，实际候选被拒绝 | `single/batch-receipt.json` |
+| 30–48 秒 | 同一候选分段扫描 33 条，MoonLSM 和 MoonFST 与预测一致 | `segmented/batch-receipt.json` |
+| 48–65 秒 | SDK 用回执绑定的页大小读完 33 条，SQLite 核对顺序和内容 | `consumer.json` |
+| 65–80 秒 | 换入同样返回 33 条的近批快照，回执清单身份不匹配 | `wrong.stderr` |
+| 80–90 秒 | 核对发布提交和两平台复验报告 | `verification/acceptance.json` |
+
+`receipt.sha256` 让演示命令可以在本机交接回执。实际发布时，通过独立可信配置传递该摘要。
+参见 [双平台程序、演示与校验值](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.16)。
+
 ## v0.1.12 分段扫描复验
 
 解压对应平台 ZIP 后，Windows 运行 `replay-segmented.cmd`，Linux 运行 `sh replay-segmented.sh`。

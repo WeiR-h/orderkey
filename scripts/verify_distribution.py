@@ -103,6 +103,48 @@ def verify_segmented_replay(root):
             "segmented_scanned": 33, "budget": 50, "matched": 33, "result_sha256": order}
 
 
+def verify_approved_replay(root, exe):
+    started = time.perf_counter()
+    windows = os.name == "nt"
+    binary = root / ("approved-consumer.exe" if windows else "approved-consumer")
+    consumer_report = read_json(root / "verification/approved-consumer-report.json")
+    assert hashlib.sha256(binary.read_bytes()).hexdigest() == consumer_report["consumer_binary_sha256"]
+    if not windows:
+        binary.chmod(0o755)
+    args = ["cmd", "/d", "/c", "replay-approved.cmd"] if windows else ["sh", "replay-approved.sh"]
+    run_result = subprocess.run([*args, "approval replay"], cwd=root, timeout=300,
+                                encoding="utf-8", capture_output=True)
+    assert run_result.returncode == 0, (run_result.stdout, run_result.stderr)
+    out = root / "approval replay"
+    single = read_json(out / "single/batch-receipt.json")
+    approved_path = out / "segmented/batch-receipt.json"
+    approved = read_json(approved_path)
+    assert single["status"] == "regression" and approved["ready"]
+    assert approved["status"] == "passed" and single["scan_mode"] == "single"
+    assert approved["scan_mode"] == "segmented" and single["digests"] == approved["digests"]
+    assert single["snapshot_rows"] == approved["snapshot_rows"] == 1516
+    assert single["selection_sha256"] == approved["selection_sha256"]
+    assert single["manifest_sha256"] == approved["manifest_sha256"]
+    for receipt, count in [(single, 71), (approved, 33)]:
+        query, = receipt["queries"]
+        assert query["target_scanned"] == query["fst_scanned"] == query["predicted_scanned"] == count
+        assert (query["max_target_scanned"], query["matched"]) == (50, 33)
+    trusted = (out / "receipt.sha256").read_text(encoding="ascii").strip()
+    assert hashlib.sha256(approved_path.read_bytes()).hexdigest() == trusted
+    consumed = read_json(out / "consumer.json")
+    actual = hashlib.sha256("\n".join(consumed["values"]).encode()).hexdigest()
+    assert consumed["ready"] and consumed["pages"] == [7, 7, 7, 7, 5] and consumed["scanned"] == 33
+    assert actual == consumer_report["ordered_payload_sha256"]
+    near = json.loads(run(exe, "query", ["--out", str(out / "near-index"),
+                                       "--where", str(root / "examples/earthquakes/near/where.json")]))
+    assert consumed["values"] == [row["value_hex"] for row in near["rows"]]
+    assert "snapshot manifest differs from batch receipt" in (out / "wrong.stderr").read_text(encoding="utf-8")
+    return {"ready": True, "seconds": time.perf_counter() - started, "snapshot_rows": 1516,
+            "single_scanned": 71, "segmented_scanned": 33, "budget": 50, "matched": 33,
+            "page_rows": consumed["pages"], "wrong_snapshot_rejected": True,
+            "receipt_sha256": trusted, "result_sha256": actual}
+
+
 def verify_archive(path, parent):
     with tempfile.TemporaryDirectory(prefix="distribution-", dir=parent) as temp:
         root = Path(temp)
@@ -123,6 +165,7 @@ def verify_archive(path, parent):
         assert hashlib.sha256(exe.read_bytes()).hexdigest() == acceptance["binary_sha256"]
         gate_replay = verify_gate_replay(root)
         segmented_replay = verify_segmented_replay(root)
+        approved_replay = verify_approved_replay(root, exe)
         current = verify_current_cases(root, exe)
         cases = []
         for name, matches in (("telemetry", 18), ("weather", 29)):
@@ -151,7 +194,7 @@ def verify_archive(path, parent):
             assert len(rows) == matches
             cases.append({"case": name, "rows": matches})
     return {"ready": True, "build": version, "cases": cases, "adoption": current, "gate_replay": gate_replay,
-            "segmented_replay": segmented_replay,
+            "segmented_replay": segmented_replay, "approved_replay": approved_replay,
             "archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 

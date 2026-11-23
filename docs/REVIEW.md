@@ -1,23 +1,18 @@
-# OrderKey v0.1.12 技术验收摘要
+# OrderKey v0.1.16 技术验收摘要
 
-USGS 末批在原批准方案下单段扫描 71 条，超过 50 条预算。诊断指出事件类型列阻挡时间范围下推。
-分段方式从当前快照的有序键提取类型前缀，按编码顺序读取各组的时间窗口。预测、MoonLSM 和 MoonFST
-实测均为 33 条，SQLite 核对 33 条记录的内容和顺序。Windows 执行 `replay-segmented.cmd`，
-Linux 执行 `sh replay-segmented.sh`。 [发布下载与演示](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.12)
+维护有序 KV 二级索引时，同一个业务查询可以继续返回完全相同的记录，扫描开销却突破预算。OrderKey 从冻结的查询和导出选型，重建候选，验收实际末批快照，再由独立消费方按批准回执读取。
 
-## 基线与交付
+## 一键复验
 
-面向维护有序 KV 二级索引的开发者。交换复合键中的业务字段后，返回的记录可以完全相同，扫描的候选记录却可能增多。OrderKey 用字段 ID、冻结查询和扫描预算给换序后的索引做离线发布判定。
+解压发行包后，Windows 执行 `replay-approved.cmd`，Linux 执行 `sh replay-approved.sh`。结果保存在 `approved-replay`。 [下载程序、演示和双平台报告](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.16)
 
-| USGS 冻结导出 | 候选扫描 | 命中 | 发布判定 |
-|---|---:|---:|---|
-| 初选，599 条目录记录 | 33 | 33 | 选中网络前导布局 |
-| 后续一，1,021 条目录记录 | 45 | 33 | 通过 50 条预算 |
-| 后续二，1,516 条目录记录 | 71 | 33 | 超预算 21 条，拒绝 |
+| 检查 | USGS ComCat 案例实测 | 证据 |
+|---|---|---|
+| 单段扫描 | 末批 1,516 条目录记录。原查询命中 33 条，双引擎扫描 71 条，超过 50 条预算 | `single/batch-receipt.json` |
+| 分段扫描 | 同一候选和查询。预测、MoonLSM 和 MoonFST 均扫描 33 条，通过预算 | `segmented/batch-receipt.json` |
+| 独立读取 | 使用绑定谓词、模式和页大小，返回 7、7、7、7、5 条。SQLite 对照载荷和返回次序 | `consumer.json`、`verification/approved-consumer-report.json` |
+| 错发快照 | 近批常规查询也得到完全一致的 33 条。用末批回执打开时因清单摘要不一致而拒绝 | `wrong.stderr` |
 
-选型绑定键契约、查询文件和策略摘要。发布命令核对已批准的方案 SHA-256、可重开的交付快照及后续批次。它为业务退化和无效输入提供不同的退出码。后续批次扫描量由有序键范围计算，独立复验重建两批后用 MoonLSM 和 MoonFST 实测，再用 SQLite 核对命中、顺序和分页。
+回执绑定原选型、冻结输入、契约、查询和候选清单。SDK 校验从可信发布配置获得的回执 SHA-256。续页游标绑定回执、快照与查询。候选扫描量按引擎返回的候选记录数计算，报告用于冻结样本的离线复验，应用负责生产切换。 [数据来源](https://github.com/WeiR-h/orderkey/blob/v0.1.16/examples/earthquakes/SOURCE.md)
 
-单段基线仍可用 `replay-gate.cmd` 或 `sh replay-gate.sh` 复验。两份判定和快照验证结果位于 `gate-replay`。
-报告以冻结数据为范围，生产切换由调用方执行。 [数据说明](https://github.com/WeiR-h/orderkey/blob/v0.1.12/examples/earthquakes/SOURCE.md)
-
-核心编码和查询逻辑使用 MoonBit。快照 SDK 在独立项目从 Mooncakes 安装后分页读取 33 条。项目使用 MIT 许可证，发行包含依赖许可和数据来源。
+核心编码、查询和 SDK 使用 MoonBit，核心仅依赖标准库。验收保留四后端兼容、10 万条选型对照、文件恢复和历史回归。源码使用 MIT 许可证，发行包附第三方许可证和数据出处。
