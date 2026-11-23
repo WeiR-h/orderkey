@@ -13,6 +13,14 @@ pub suberror SnapshotError {
 }
 
 // Types and methods
+type ApprovedQuery
+
+pub struct ApprovedReader {
+  // private fields
+}
+pub async fn ApprovedReader::open(String, String, String) -> Self
+pub fn ApprovedReader::query(Self, String, @orderkey.QuerySpec, cursor? : Bytes?) -> Page raise
+
 pub(all) struct Page {
   rows : Array[Record]
   cursor : Bytes?

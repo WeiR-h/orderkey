@@ -37,7 +37,7 @@ fn digest(bytes : Bytes) -> String {
 }
 
 ///|
-async fn read_file(path : String) -> Bytes {
+async fn read_file(path : String, maximum~ : Int32 = 67108864) -> Bytes {
   if @fs.kind(path, follow_symlink=false) != @fs.Regular {
     raise InvalidSnapshot("expected regular file")
   }
@@ -50,8 +50,8 @@ async fn read_file(path : String) -> Bytes {
     if n == 0 {
       break
     }
-    if buffer.length() > 67108864 - n {
-      raise InvalidSnapshot("file exceeds 64 MiB")
+    if buffer.length() > maximum - n {
+      raise InvalidSnapshot("snapshot or receipt file exceeds size limit")
     }
     for i = 0; i < n; i = i + 1 {
       buffer.write_byte(block[i])
@@ -101,6 +101,14 @@ async fn inventory(dir : String) -> Array[String] {
 ///|
 /// Opens a portable candidate without requiring original input paths.
 pub async fn Reader::open(dir : String) -> Reader {
+  open_candidate(dir)
+}
+
+///|
+async fn open_candidate(
+  dir : String,
+  expected_manifest~ : String? = None,
+) -> Reader {
   if @fs.kind(dir, follow_symlink=false) != @fs.Directory {
     raise InvalidSnapshot("expected candidate directory")
   }
@@ -111,6 +119,9 @@ pub async fn Reader::open(dir : String) -> Reader {
   }
   let raw = read_file(dir + "/manifest.json")
   let manifest_hash = digest(raw)
+  if expected_manifest is Some(expected) && manifest_hash != expected {
+    raise InvalidSnapshot("snapshot manifest differs from batch receipt")
+  }
   if string(property(report, "manifest_sha256")) != manifest_hash {
     raise InvalidSnapshot("receipt differs")
   }

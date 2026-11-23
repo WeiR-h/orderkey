@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import shutil
 
-from verify_cli import ROOT
+from verify_cli import ROOT, run
 from verify_earthquakes import cases, compare_order
 from verify_layouts import compare, read_json, write_json
 from verify_segmented import rebuild
@@ -45,6 +46,74 @@ def prepare_batches(exe, base):
     return case, records, selection, late, near
 
 
+def approved_args(delivery, receipt, where):
+    return ["--out", str(delivery), "--receipt", str(receipt),
+            "--receipt-sha256", sha(receipt), "--where", str(where)]
+
+
+def verify_approved(exe, base, case, selection, late, near, oracle):
+    where = case / "late/where.json"
+    receipt = base / "segmented/batch-receipt.json"
+    args = approved_args(late, receipt, where)
+    rows, scanned, cursor = [], 0, []
+    first_cursor = None
+    pages = []
+    for _ in range(6):
+        page = json.loads(run(exe, "query-approved", args + cursor))
+        pages.append(len(page["rows"]))
+        rows.extend(page["rows"])
+        scanned += page["scanned"]
+        if not page["cursor"]:
+            break
+        if not cursor:
+            first_cursor = page["cursor"]
+        cursor = ["--cursor", page["cursor"]]
+    assert pages == [7, 7, 7, 7, 5] and scanned == 33
+    assert hashlib.sha256("\n".join(row["value_hex"] for row in rows).encode()).hexdigest() == oracle
+    digest = hashlib.sha256()
+    for row in rows:
+        for name in ("key_hex", "value_hex"):
+            data = bytes.fromhex(row[name])
+            digest.update(len(data).to_bytes(4, "big"))
+            digest.update(data)
+    assert digest.hexdigest() == read_json(receipt)["queries"][0]["ordered_result_sha256"]
+    rejected = [
+        approved_args(near, receipt, where),
+        approved_args(late, base / "single/batch-receipt.json", where),
+        args + ["--limit", "1"],
+        args + ["--scan-mode", "single"],
+    ]
+    changed_receipt = base / "edited-receipt.json"
+    write_json(changed_receipt, {**read_json(receipt), "scan_mode": "single"})
+    rejected.append([*args[:3], str(changed_receipt), *args[4:]])
+    for name, query in [
+        ("id", {**read_json(where), "id": "another-query"}),
+        ("predicate", {**read_json(where), "eq": {"network": {"bytes_hex": "7573"}}}),
+    ]:
+        changed = base / (name + ".json")
+        write_json(changed, query)
+        rejected.append(args[:-1] + [str(changed)])
+    broken = base / "broken"
+    shutil.copytree(late, broken)
+    (broken / "target.fst").write_bytes(b"broken")
+    rejected.append(approved_args(broken, receipt, where))
+    gate_batch(exe, selection, case / "late.json", "late", late, "segmented", base / "new-receipt", 0)
+    other_receipt = base / "new-receipt/batch-receipt.json"
+    assert sha(other_receipt) != sha(receipt)
+    rejected.append(approved_args(late, other_receipt, where) + ["--cursor", first_cursor])
+    gate_batch(exe, selection, case / "near.json", "near", near, "single", base / "near-single", 0)
+    near_args = approved_args(near, base / "near-single/batch-receipt.json", where)
+    assert len(json.loads(run(exe, "query-approved", near_args))["rows"]) == 7
+    rejected.append(near_args + ["--cursor", first_cursor])
+    unapproved = json.loads(run(exe, "query", ["--out", str(late), "--where", str(where),
+                                               "--scan-mode", "segmented", "--limit", "7"]))
+    rejected.append(args + ["--cursor", unapproved["cursor"]])
+    for invocation in rejected:
+        run(exe, "query-approved", invocation, success=False)
+    return {"ready": True, "scanned": scanned, "page_rows": pages,
+            "ordered_result_sha256": digest.hexdigest(), "rejected": len(rejected)}
+
+
 def verify(exe, base):
     case, records, selection, late, near = prepare_batches(exe, base)
     oracle = compare_order(exe, case / "late", records["late"], late)
@@ -67,6 +136,7 @@ def verify(exe, base):
     assert single["queries"][0]["ordered_result_sha256"] == segmented["queries"][0]["ordered_result_sha256"]
     wrong = gate_batch(exe, selection, batch_file, "late", near, "segmented", base / "wrong", 2)
     assert "another frozen export" in wrong["error"]
+    approved = verify_approved(exe, base, case, selection, late, near, oracle)
     workload = case / "late/layout-workload.json"
     updated = read_json(workload)
     updated["queries"][0]["max_target_scanned"] = 100
@@ -74,7 +144,7 @@ def verify(exe, base):
     changed = gate_batch(exe, selection, batch_file, "late", late, "segmented", base / "changed", 2)
     assert "locked audit" in changed["error"]
     assert sha(input_path) == original_hash
-    return {"ready": True, "single": single, "segmented": segmented,
+    return {"ready": True, "single": single, "segmented": segmented, "approved": approved,
             "wrong_delivery": wrong, "changed_budget": changed, "sqlite_payload_sha256": oracle}
 
 

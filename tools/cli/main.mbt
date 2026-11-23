@@ -117,6 +117,10 @@ async fn execute(args : Array[String]) -> Unit {
     gate_batch(args)
     return
   }
+  if command == "query-approved" {
+    query_approved(args)
+    return
+  }
   if command == "verify-delivery" {
     let options = layout_options(args, ["--out", "--selection-sha256"], [])
     let expected = options.paths
@@ -249,7 +253,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|build|resume|verify|verify-delivery|query|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
+      " version|plan|build|resume|verify|verify-delivery|query|query-approved|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
     )
     return
   }

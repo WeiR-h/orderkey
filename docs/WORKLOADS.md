@@ -91,3 +91,16 @@ orderkey gate-batch --selection selection --selection-sha256 APPROVED_SHA256 --b
 每条查询记录预算、页大小、预测和实测候选行数，以及按返回顺序编码的键与载荷摘要。
 命令需要新的回执目录。退出 0 表示通过，1 表示预算或顺序约束未通过，2 表示输入、交付物或复验无效。
 USGS 末批的同一个候选包含 1,516 条记录。单段实测扫描 71 条，分段实测扫描 33 条，两种模式均命中 33 条。
+
+## 按批准回执读取
+
+从可信发布配置取得回执的 SHA-256。消费方只需候选目录、回执和查询条件。
+
+~~~sh
+orderkey query-approved --out late-index --receipt late-gate/batch-receipt.json --receipt-sha256 TRUSTED_RECEIPT_SHA256 --where examples/earthquakes/late/where.json
+~~~
+
+`--where` 提供查询 ID 和谓词。模式、页大小和预算由回执确定。
+将上一页的 `cursor` 传入 `--cursor` 继续，直到返回 `null`。
+SDK 对应接口为 `ApprovedReader::open(snapshot, receipt, expected_sha256)`
+及 `reader.query(id, query, cursor~)`。不同回执、候选或查询之间的游标不可通用。

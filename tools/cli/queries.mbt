@@ -149,29 +149,50 @@ async fn semantic_query(args : Array[String], dir : String) -> Unit {
     (reader.query(query, limit~, cursor~), [])
   }
   println(
-    object(
-      [
-        (
-          "rows",
-          Json::array(
-            page.rows.map(row => {
-              object([
-                ("key_hex", Json::string(hex(row.key))),
-                ("value_hex", Json::string(hex(row.value))),
-              ])
-            }),
-          ),
-        ),
-        (
-          "cursor",
-          page.cursor
-          .map(token => Json::string(hex(token)))
-          .unwrap_or(Json::null()),
-        ),
-        ("scanned", Json::number(page.scanned.to_double())),
-        ("plan", plan_json(reader.plan(query))),
-      ] +
-      scan,
-    ).stringify(),
+    object(page_fields(page) + [("plan", plan_json(reader.plan(query)))] + scan).stringify(),
   )
+}
+
+///|
+fn page_fields(page : @snapshot.Page) -> Array[(String, Json)] {
+  [
+    (
+      "rows",
+      Json::array(
+        page.rows.map(row => {
+          object([
+            ("key_hex", Json::string(hex(row.key))),
+            ("value_hex", Json::string(hex(row.value))),
+          ])
+        }),
+      ),
+    ),
+    (
+      "cursor",
+      page.cursor.map(token => Json::string(hex(token))).unwrap_or(Json::null()),
+    ),
+    ("scanned", Json::number(page.scanned.to_double())),
+  ]
+}
+
+///|
+async fn query_approved(args : Array[String]) -> Unit {
+  let options = layout_options(
+    args,
+    ["--out", "--receipt", "--receipt-sha256", "--where", "--cursor"],
+    [],
+  )
+  let specification = json_file(options.path("--where"))
+  let id = text(field(specification, "id"))
+  let query = parse_query(specification)
+  let cursor = match options.paths.get("--cursor") {
+    None => None
+    Some(tokens) => Some(decode(tokens[0]))
+  }
+  let reader = @snapshot.ApprovedReader::open(
+    options.path("--out"),
+    options.path("--receipt"),
+    options.path("--receipt-sha256"),
+  )
+  println(object(page_fields(reader.query(id, query, cursor~))).stringify())
 }
