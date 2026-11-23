@@ -108,6 +108,26 @@ async fn explain(args : Array[String]) -> Unit {
 }
 
 ///|
+fn segmented_mode(mode : String) -> Bool raise {
+  match mode {
+    "single" => false
+    "segmented" => true
+    _ => raise Invalid("scan mode must be single or segmented")
+  }
+}
+
+///|
+fn segmented_scan_json(scan : @orderkey.SegmentedScan) -> Json {
+  object([
+    ("single_scanned", Json::number(scan.single_scanned.to_double())),
+    ("planned_scanned", Json::number(scan.planned_scanned.to_double())),
+    ("planning_probes", Json::number(scan.planning_probes.to_double())),
+    ("ranges", Json::number(scan.windows.length().to_double())),
+    ("fallback", scan.fallback.map(Json::string).unwrap_or(Json::null())),
+  ])
+}
+
+///|
 async fn semantic_query(args : Array[String], dir : String) -> Unit {
   if args.contains("--start-hex") || args.contains("--end-hex") {
     invalid("--where cannot be combined with byte bounds")
@@ -116,32 +136,42 @@ async fn semantic_query(args : Array[String], dir : String) -> Unit {
   let reader = @snapshot.Reader::open(dir)
   let token = option(args, "--cursor")
   let limit = @string.parse_int(option(args, "--limit", fallback="100"))
-  let page = reader.query(
-    query,
-    limit~,
-    cursor=if token == "" { None } else { Some(decode(token)) },
-  )
+  let cursor = if token == "" { None } else { Some(decode(token)) }
+  let (page, scan) = if segmented_mode(
+      option(args, "--scan-mode", fallback="single"),
+    ) {
+    let plan = reader.plan_segmented(query)
+    (
+      reader.query_segmented(plan, limit~, cursor~),
+      [("segmented_scan", segmented_scan_json(plan.scan()))],
+    )
+  } else {
+    (reader.query(query, limit~, cursor~), [])
+  }
   println(
-    object([
-      (
-        "rows",
-        Json::array(
-          page.rows.map(row => {
-            object([
-              ("key_hex", Json::string(hex(row.key))),
-              ("value_hex", Json::string(hex(row.value))),
-            ])
-          }),
+    object(
+      [
+        (
+          "rows",
+          Json::array(
+            page.rows.map(row => {
+              object([
+                ("key_hex", Json::string(hex(row.key))),
+                ("value_hex", Json::string(hex(row.value))),
+              ])
+            }),
+          ),
         ),
-      ),
-      (
-        "cursor",
-        page.cursor
-        .map(token => Json::string(hex(token)))
-        .unwrap_or(Json::null()),
-      ),
-      ("scanned", Json::number(page.scanned.to_double())),
-      ("plan", plan_json(reader.plan(query))),
-    ]).stringify(),
+        (
+          "cursor",
+          page.cursor
+          .map(token => Json::string(hex(token)))
+          .unwrap_or(Json::null()),
+        ),
+        ("scanned", Json::number(page.scanned.to_double())),
+        ("plan", plan_json(reader.plan(query))),
+      ] +
+      scan,
+    ).stringify(),
   )
 }

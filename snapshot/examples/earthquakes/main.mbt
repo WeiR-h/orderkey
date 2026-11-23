@@ -13,9 +13,10 @@ async fn main {
     Some((b"time", Some(Signed(1711929600000L)), Some(Signed(1712534400000L)))),
   )
   let values = []
+  let plan = reader.plan_segmented(query)
   let mut cursor : Bytes? = None
   while true {
-    let page = reader.query(query, limit=7, cursor~)
+    let page = reader.query_segmented(plan, limit=7, cursor~)
     for row in page.rows {
       values.push(@hex.encode(row.value[:]))
     }

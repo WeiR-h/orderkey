@@ -42,6 +42,11 @@ orderkey audit-layout --selection fleet-selection --batches examples/regression/
 
 ## 发布判定
 
+读冻结快照时可用 `query --where FILE --scan-mode segmented`。SDK 使用
+`plan_segmented` 准备计划，再把同一个计划交给 `query_segmented` 分页。
+报告区分计划探查数和候选扫描行数。分组超过 16 个、查询形状不适用或扫描数持平时使用单段结果，
+并给出具体原因。
+
 用 `explain --where FILE --source-contract FILE --target-contract FILE` 查看类型化范围。
 报告用十六进制表示字段 ID，可表达任何二进制字段名。USGS 案例的目标布局固定 `network`，
 `event_type` 阻挡 `time` 区间下推，末批单段扫描 71 条、过滤 38 条、超预算 21 条。

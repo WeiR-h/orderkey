@@ -21,6 +21,7 @@ pub(all) struct Page {
 pub struct Reader {
   priv contract : @orderkey.IndexContract
   priv rows : Array[Record]
+  priv keys : Array[Bytes]
   priv map : @fst.FstMap
   priv manifest_hash : String
   priv loaded_bytes : Int64
@@ -189,7 +190,14 @@ pub async fn Reader::open(dir : String) -> Reader {
     read_file(dir + "/report.json") != report_raw {
     raise InvalidSnapshot("candidate changed while opening")
   }
-  { contract, rows, map, manifest_hash, loaded_bytes, }
+  {
+    contract,
+    rows,
+    keys: rows.map(row => row.key),
+    map,
+    manifest_hash,
+    loaded_bytes,
+  }
 }
 
 ///|
@@ -222,11 +230,7 @@ pub fn Reader::query(
   limit~ : Int32 = 100,
   cursor~ : Bytes? = None,
 ) -> Page raise {
-  if limit < 1 || limit > 100000 {
-    raise InvalidSnapshot("limit must be in 1..100000")
-  }
   let plan = query.plan(self.contract)
-  let original = plan.byte_range()
   let scope = @utf8.encode(
     digest(
       @utf8.encode(
@@ -234,45 +238,67 @@ pub fn Reader::query(
       ),
     ),
   )
-  let window = match cursor {
+  self.read_page(plan, [plan.byte_range()], scope, limit, cursor)
+}
+
+///|
+fn Reader::read_page(
+  self : Reader,
+  plan : @orderkey.QueryPlan,
+  windows : Array[@orderkey.ByteRange],
+  scope : Bytes,
+  limit : Int32,
+  cursor : Bytes?,
+) -> Page raise {
+  if limit < 1 || limit > 100000 {
+    raise InvalidSnapshot("limit must be in 1..100000")
+  }
+  let original = plan.byte_range()
+  let remaining = match cursor {
     None => original
     Some(token) => self.contract.resume_cursor(scope, original, token)
   }
-  let stream = match window {
-    Empty => self.map.stream(range=@fst.KeyRange::between(b"", b""))
-    Span(first, last) =>
-      self.map.stream(range={
-        lower: @fst.Included(first),
-        upper: match last {
-          Some(key) => @fst.Excluded(key)
-          None => @fst.Unbounded
-        },
-      })
-  }
-  defer stream.close()
-  // Pull one entry at a time; a page never materializes the remaining stream.
   let rows = []
   let mut scanned = 0
-  let mut last : Bytes? = None
-  while true {
-    let entries = stream.take(1)
-    if entries.is_empty() {
-      return { rows, cursor: None, scanned, }
+  for window in windows {
+    guard remaining is Span(resume_key, _) && window is Span(first, last) else {
+      continue
     }
-    let entry = entries[0]
-    scanned += 1
-    last = Some(entry.key)
-    let row = self.rows[entry.value.to_int()]
-    if plan.matches(row.key) {
-      rows.push(row)
-      if rows.length() == limit {
+    let lower = if first.lexical_compare(resume_key) < 0 {
+      resume_key
+    } else {
+      first
+    }
+    if last is Some(upper) && lower.lexical_compare(upper) >= 0 {
+      continue
+    }
+    let stream = self.map.stream(range={
+      lower: @fst.Included(lower),
+      upper: match last {
+        Some(upper) => @fst.Excluded(upper)
+        None => @fst.Unbounded
+      },
+    })
+    defer stream.close()
+    while true {
+      let entries = stream.take(1)
+      if entries.is_empty() {
         break
+      }
+      let entry = entries[0]
+      scanned += 1
+      let row = self.rows[entry.value.to_int()]
+      if plan.matches(row.key) {
+        rows.push(row)
+        if rows.length() == limit {
+          return {
+            rows,
+            cursor: Some(self.contract.issue_cursor(scope, original, entry.key)),
+            scanned,
+          }
+        }
       }
     }
   }
-  let token = match last {
-    None => None
-    Some(key) => Some(self.contract.issue_cursor(scope, original, key))
-  }
-  { rows, cursor: token, scanned, }
+  { rows, cursor: None, scanned, }
 }

@@ -183,6 +183,9 @@ async fn execute(args : Array[String]) -> Unit {
     if args.contains("--where") {
       semantic_query(args, dir)
     } else {
+      if args.contains("--scan-mode") {
+        invalid("--scan-mode requires --where")
+      }
       query(args, dir)
     }
     return

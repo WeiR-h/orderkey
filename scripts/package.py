@@ -47,6 +47,7 @@ def main():
     for report in ("reindex-report.json","cli-report.json","benchmark.json","queries-report.json",
                    "snapshot-report.json","consumer-report.json","layouts-report.json","delivery-report.json",
                    "capture-report.json","audit-report.json","gate-report.json","earthquakes-report.json",
+                   "segmented-report.json",
                    "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():

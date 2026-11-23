@@ -110,6 +110,7 @@ pub fn QueryPlan::matches(Self, Bytes) -> Bool raise KeyError
 pub fn QueryPlan::prefix_fields(Self) -> Int32
 pub fn QueryPlan::pushdown_fields(Self) -> (Array[Bytes], Bytes?, Array[Bytes])
 pub fn QueryPlan::residual_fields(Self) -> Int32
+pub fn QueryPlan::segment_ranges(Self, Array[Bytes]) -> SegmentedScan raise
 
 pub struct QuerySpec {
   // private fields
@@ -123,6 +124,14 @@ pub struct ReindexPlan {
 }
 pub fn ReindexPlan::new(IndexContract, IndexContract) -> Self raise ReindexError
 pub fn ReindexPlan::rekey(Self, Bytes) -> Bytes raise KeyError
+
+pub(all) struct SegmentedScan {
+  windows : Array[ByteRange]
+  single_scanned : Int32
+  planned_scanned : Int32
+  planning_probes : Int32
+  fallback : String?
+}
 
 pub(all) enum TupleBound {
   TupleUnbounded
