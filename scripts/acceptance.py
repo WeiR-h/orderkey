@@ -36,6 +36,7 @@ def main():
            [sys.executable,'scripts/verify_batch.py','--report',str(OUT/'batch-report.json')],
            [sys.executable,'scripts/verify_snapshot.py','--report',str(OUT/'snapshot-report.json')],
            [sys.executable,'scripts/verify_consumer.py','--report',str(OUT/'consumer-report.json')],
+           [sys.executable,'scripts/verify_approved_consumer.py','--report',str(OUT/'approved-consumer-report.json')],
            [sys.executable,'scripts/benchmark.py','--report',str(OUT/'benchmark.json')],
            [sys.executable,'scripts/benchmark_layouts.py','--report',str(OUT/'layout-benchmark.json')]]
     try:
