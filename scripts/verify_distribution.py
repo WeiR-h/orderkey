@@ -73,6 +73,36 @@ def verify_current_cases(root, exe):
                         "unchanged_matches": 180, "budget": 1500}}
 
 
+def verify_segmented_replay(root):
+    started = time.perf_counter()
+    args = (["cmd", "/d", "/c", "replay-segmented.cmd"] if os.name == "nt" else
+            ["sh", "replay-segmented.sh"])
+    subprocess.run([*args, "segmented replay"], cwd=root, check=True, timeout=300,
+                   encoding="utf-8", capture_output=True)
+    out = root / "segmented replay"
+    rejected = read_json(out / "baseline/late/gate-report.json")
+    repaired = read_json(out / "repaired/gate-report.json")
+    old, = rejected["batches"][0]["queries"]
+    new, = repaired["batches"][0]["queries"]
+    assert rejected["status"] == "regression" and repaired["ready"]
+    assert rejected["selection_sha256"] == repaired["selection_sha256"]
+    assert rejected["batches"][0]["digests"] == repaired["batches"][0]["digests"]
+    assert (old["predicted_scanned"], new["predicted_scanned"]) == (71, 33)
+    assert old["budget"] == new["budget"] == 50
+    explanation = read_json(out / "diagnosis.json")["target"]
+    assert explanation["blocking_field_id_hex"] == b"event_type".hex()
+    receipt = read_json(out / "measured.json")
+    measured, = receipt["queries"]
+    read = read_json(out / "read.json")
+    assert receipt["workload_passed"] and measured["pagination_match"]
+    assert measured["target_scanned"] == measured["fst_scanned"] == read["scanned"] == 33
+    order = hashlib.sha256("\n".join(row["value_hex"] for row in read["rows"]).encode()).hexdigest()
+    expected = read_json(root / "verification/segmented-report.json")["sqlite_ordered_result_sha256"]
+    assert len(read["rows"]) == 33 and order == expected and not read["cursor"]
+    return {"ready": True, "seconds": time.perf_counter() - started, "single_scanned": 71,
+            "segmented_scanned": 33, "budget": 50, "matched": 33, "result_sha256": order}
+
+
 def verify_archive(path, parent):
     with tempfile.TemporaryDirectory(prefix="distribution-", dir=parent) as temp:
         root = Path(temp)
@@ -92,6 +122,7 @@ def verify_archive(path, parent):
         assert acceptance["ready"] and acceptance["build"] == version and not version["dirty"]
         assert hashlib.sha256(exe.read_bytes()).hexdigest() == acceptance["binary_sha256"]
         gate_replay = verify_gate_replay(root)
+        segmented_replay = verify_segmented_replay(root)
         current = verify_current_cases(root, exe)
         cases = []
         for name, matches in (("telemetry", 18), ("weather", 29)):
@@ -120,6 +151,7 @@ def verify_archive(path, parent):
             assert len(rows) == matches
             cases.append({"case": name, "rows": matches})
     return {"ready": True, "build": version, "cases": cases, "adoption": current, "gate_replay": gate_replay,
+            "segmented_replay": segmented_replay,
             "archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 

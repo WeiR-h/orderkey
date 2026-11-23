@@ -33,6 +33,8 @@ def main():
            "REVIEW.md":ROOT/"docs/REVIEW.md","toolchain.json":ROOT/"toolchain.json"}
     replay = "replay-gate.cmd" if os.name == "nt" else "replay-gate.sh"
     files[replay] = EARTHQUAKES / replay
+    segmented = "replay-segmented.cmd" if os.name == "nt" else "replay-segmented.sh"
+    files[segmented] = EARTHQUAKES / segmented
     weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
     files[weather]=weather_binary()
     files["examples/weather/noaa-ghcnd-2024-q1.csv"]=ROOT/"examples/moonlsm/fixtures/noaa-ghcnd-2024-q1.csv"

@@ -1,4 +1,4 @@
-> v0.1.8 提供双平台一键发布复验。 [演示与命令](DEMO.md) · [技术摘要](REVIEW.md) · [业务查询采集与跨批审查](WORKLOADS.md)
+> v0.1.12 提供双平台分段扫描复验，展示单段被拒绝及同一预算下的修复。 [演示与命令](DEMO.md) · [技术摘要](REVIEW.md) · [业务查询采集与跨批审查](WORKLOADS.md)
 
 # Native file tool
 

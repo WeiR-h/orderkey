@@ -1,5 +1,17 @@
 # 约 90 秒演示
 
+## v0.1.12 分段扫描复验
+
+解压对应平台 ZIP 后，Windows 运行 `replay-segmented.cmd`，Linux 运行 `sh replay-segmented.sh`。
+默认输出目录是 `segmented-replay`，也可传入一个新的目录名。
+
+| 时间 | 展示 |
+|---|---|
+| 0–20 秒 | 原单段查询在末批读取 71 条，超过 50 条预算，发布判定返回退化。 |
+| 20–40 秒 | `diagnosis.json` 指出事件类型列阻挡时间下推。 |
+| 40–65 秒 | 在完整冻结键表中枚举可用类型前缀，逐段读取时间窗口，扫描降至 33。 |
+| 65–90 秒 | 核对 `repaired/gate-report.json` 的预测和 `measured.json` 的双引擎实测。33 条记录的顺序与 SQLite 一致。 |
+
 ## v0.1.8 评审复验
 
 解压对应平台 ZIP 后，在目录里运行 `replay-gate.cmd`（Windows）或 `sh replay-gate.sh`（Linux）。

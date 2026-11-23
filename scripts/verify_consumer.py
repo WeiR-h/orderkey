@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 from verify_cli import ROOT,dataset,write_case,run
 from verify_earthquakes import cases as earthquake_cases
+from verify_segmented import rebuild
 from verify_layouts import build_args, case_args, workload, write_json
 
 def main():
@@ -77,17 +78,13 @@ async fn main {
                        cwd=consumer, env=env, check=True, timeout=180)
         earthquakes = directory / 'earthquakes'
         earthquake_cases(earthquakes)
-        training = earthquakes / 'training'
-        selected, delivery = earthquakes / 'selection', earthquakes / 'delivery'
-        run(exe, 'compare-layouts', [*case_args(training), '--candidate',
-                                     str(training / 'target.json'), '--out', str(selected)])
-        approved = hashlib.sha256((selected / 'selection.json').read_bytes()).hexdigest()
-        run(exe, 'build-selected', build_args(training, selected, delivery))
-        (training / 'input.jsonl').rename(training / 'original-export.jsonl')
+        late, delivery = earthquakes / 'late', earthquakes / 'delivery'
+        rebuild(exe, late, delivery)
+        (late / 'input.jsonl').rename(late / 'original-export.jsonl')
         for name in ('moon.pkg', 'main.mbt'):
             shutil.copyfile(ROOT / 'snapshot/examples/earthquakes' / name, consumer / name)
         result = subprocess.check_output(['moon', 'run', '--target', 'native', '.', '--',
-                                          str(delivery), approved], cwd=consumer, env=env,
+                                          str(delivery)], cwd=consumer, env=env,
                                          text=True, encoding='utf-8', timeout=180)
         values = json.loads(result.strip().splitlines()[-1])
         assert len(values) == 33
@@ -96,7 +93,7 @@ async fn main {
         assert digest == oracle['batches'][0]['ordered_result_sha256']
     args.report.write_text(json.dumps({
         'ready': True, 'weather_rows': 29,
-        'earthquake_rows': 33, 'earthquake_result_sha256': digest,
+        'earthquake_rows': 33, 'earthquake_scanned': 33, 'earthquake_result_sha256': digest,
         'dependency_source': 'public Mooncakes' if args.registry else 'fresh module with packaged local SDK',
         'public_registry_install': args.registry,
     }) + '\n', encoding='utf-8')
