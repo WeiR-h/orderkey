@@ -286,6 +286,7 @@ fn evaluate_layout(
   input : LayoutInput,
   target : @orderkey.IndexContract,
   baseline : Bool,
+  segmented~ : Bool = false,
 ) -> LayoutScore raise {
   let keys = if baseline {
     input.rows.map(row => row.key)
@@ -309,7 +310,11 @@ fn evaluate_layout(
     } else {
       query.predicate.plan(target)
     }
-    let scanned = scan_count(keys, plan.byte_range())
+    let split = if segmented { Some(plan.segment_ranges(keys)) } else { None }
+    let scanned = match split {
+      Some(scan) => scan.planned_scanned
+      None => scan_count(keys, plan.byte_range())
+    }
     let source_order = variable_order(source_fields, query.equality)
     let target_order = variable_order(target_fields, query.equality)
     let changed = source_order != target_order
@@ -362,7 +367,10 @@ fn evaluate_layout(
           ("weight", Json::number(query.weight.to_double())),
           ("order_changed", Json::boolean(changed)),
           ("failures", Json::array(failures)),
-        ],
+        ] +
+        split
+        .map(scan => [("segmented_scan", segmented_scan_json(scan))])
+        .unwrap_or([]),
       ),
     )
   }

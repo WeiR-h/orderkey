@@ -1,13 +1,12 @@
 ///|
 async fn probe_database(
   dir : String,
-  range : @orderkey.ByteRange,
+  windows : Array[@orderkey.ByteRange],
   count : Int32,
 ) -> Array[Row] {
-  if range is Empty {
+  if windows.all(window => window is Empty) {
     return []
   }
-  guard range is Span(first, last) else { return [] }
   let absolute = @fs.realpath(dir)
   let previous = @fs.realpath(".")
   enter_directory(absolute)
@@ -16,16 +15,19 @@ async fn probe_database(
   defer storage.close()
   let db = @moonlsm.Db::open(storage, 1048576)
   defer db.close()
-  db
-  .scan(
-    prefixed(first),
-    match last {
-      Some(key) => prefixed(key)
-      None => b"\x02"
-    },
-    count + 1,
-  )
-  .map(row => { key: row.key[1:].to_owned(), value: row.value, })
+  let rows = []
+  for window in windows {
+    guard window is Span(first, last) else { continue }
+    for
+      row in db.scan(
+        prefixed(first),
+        last.map(prefixed).unwrap_or(b"\x02"),
+        count + 1,
+      ) {
+      rows.push({ key: row.key[1:].to_owned(), value: row.value, })
+    }
+  }
+  rows
 }
 
 ///|
@@ -79,6 +81,7 @@ async fn workload(
   args : Array[String],
   dir : String,
   replay_source~ : Bool = true,
+  segmented~ : Bool = false,
 ) -> Json {
   let manifest = require_ready(dir)
   let manifest_hash = hash(read(dir + "/manifest.json"))
@@ -126,15 +129,24 @@ async fn workload(
       let source_scanned = if replay_source {
         probe_database(
           scratch + "/source",
-          source_plan.byte_range(),
+          [source_plan.byte_range()],
           source.length(),
         )
       } else {
         source.filter(row => source_plan.byte_range().contains(row.key))
       }
+      let split = if segmented {
+        Some(reader.plan_segmented(predicate))
+      } else {
+        None
+      }
+      let scan = split.map(plan => plan.scan())
+      let windows = scan
+        .map(info => info.windows)
+        .unwrap_or([target_plan.byte_range()])
       let target_scanned = probe_database(
         scratch + "/target",
-        target_plan.byte_range(),
+        windows,
         target.length(),
       )
       let source_actual = source_scanned.filter(row => {
@@ -154,7 +166,10 @@ async fn workload(
       let mut cursor : Bytes? = None
       let mut fst_scanned = 0
       while true {
-        let page = reader.query(predicate, limit=page_size, cursor~)
+        let page = match split {
+          Some(plan) => reader.query_segmented(plan, limit=page_size, cursor~)
+          None => reader.query(predicate, limit=page_size, cursor~)
+        }
         fst_scanned += page.scanned
         for row in page.rows {
           pages.push({ key: row.key, value: row.value, })
@@ -171,6 +186,9 @@ async fn workload(
       if fst_scanned != target_scanned.length() {
         invalid("FST scan count differs")
       }
+      if scan is Some(plan) && plan.planned_scanned != fst_scanned {
+        invalid("segmented prediction differs from measured scan count")
+      }
       let within_budget = target_scanned.length() <= budget
       if !within_budget {
         passed = false
@@ -182,26 +200,37 @@ async fn workload(
         }
       }
       results.push(
-        object([
-          ("id", Json::string(id)),
-          ("query_sha256", Json::string(hash(predicate.to_bytes()))),
-          ("source_plan", plan_json(source_plan)),
-          ("target_plan", plan_json(target_plan)),
-          ("source_scanned", Json::number(source_scanned.length().to_double())),
-          ("target_scanned", Json::number(target_scanned.length().to_double())),
-          ("matched", Json::number(actual.length().to_double())),
-          ("fst_scanned", Json::number(fst_scanned.to_double())),
-          (
-            "filtered",
-            Json::number(
-              (target_scanned.length() - actual.length()).to_double(),
+        object(
+          [
+            ("id", Json::string(id)),
+            ("query_sha256", Json::string(hash(predicate.to_bytes()))),
+            ("source_plan", plan_json(source_plan)),
+            ("target_plan", plan_json(target_plan)),
+            (
+              "source_scanned",
+              Json::number(source_scanned.length().to_double()),
             ),
-          ),
-          ("max_target_scanned", Json::number(budget.to_double())),
-          ("results_match", Json::boolean(true)),
-          ("pagination_match", Json::boolean(true)),
-          ("within_budget", Json::boolean(within_budget)),
-        ]),
+            (
+              "target_scanned",
+              Json::number(target_scanned.length().to_double()),
+            ),
+            ("matched", Json::number(actual.length().to_double())),
+            ("fst_scanned", Json::number(fst_scanned.to_double())),
+            (
+              "filtered",
+              Json::number(
+                (target_scanned.length() - actual.length()).to_double(),
+              ),
+            ),
+            ("max_target_scanned", Json::number(budget.to_double())),
+            ("results_match", Json::boolean(true)),
+            ("pagination_match", Json::boolean(true)),
+            ("within_budget", Json::boolean(within_budget)),
+          ] +
+          scan
+          .map(info => [("segmented_scan", segmented_scan_json(info))])
+          .unwrap_or([]),
+        ),
       )
     } catch {
       error => raise Invalid("query " + id + ": " + error_message(error))
@@ -218,6 +247,7 @@ async fn workload(
   object([
     ("schema_version", Json::number(1)),
     ("workload_passed", Json::boolean(passed)),
+    ("scan_mode", Json::string(if segmented { "segmented" } else { "single" })),
     ("cutover_ready", Json::boolean(passed)),
     ("data_ready", Json::boolean(true)),
     ("version", Json::string(tool_version)),
@@ -277,7 +307,12 @@ async fn check_queries(args : Array[String], dir : String) -> Unit {
       ("run_id", Json::string(run_id)),
     ]),
   )
-  let result = workload(args, dir) catch {
+  let result = try {
+    let segmented = segmented_mode(
+      option(args, "--scan-mode", fallback="single"),
+    )
+    workload(args, dir, segmented~)
+  } catch {
     error => {
       atomic_json(
         path,

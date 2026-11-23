@@ -13,10 +13,11 @@ from verify_cli import ROOT, run
 from verify_layouts import build_args, case_args, compare, read_json, write_json
 
 
-def gate(exe, selection, approved, batches, delivery, out, code):
+def gate(exe, selection, approved, batches, delivery, out, code, *, mode=None):
     result = subprocess.run([str(exe), "gate-selected", "--selection", str(selection),
                              "--selection-sha256", approved, "--batches", str(batches),
-                             "--delivery", str(delivery), "--out", str(out)],
+                             "--delivery", str(delivery), "--out", str(out),
+                             *(["--scan-mode", mode] if mode else [])],
                             capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert result.returncode == code, (result.returncode, result.stdout, result.stderr)
     report = read_json(out / "gate-report.json")

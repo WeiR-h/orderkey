@@ -47,6 +47,11 @@ orderkey audit-layout --selection fleet-selection --batches examples/regression/
 报告区分计划探查数和候选扫描行数。分组超过 16 个、查询形状不适用或扫描数持平时使用单段结果，
 并给出具体原因。
 
+用 `audit-layout --locked --scan-mode segmented` 和 `gate-selected --scan-mode segmented`
+核对冻结批次是否满足预算。发布流程从受信任的配置指定扫描模式和批准摘要。
+审查报告的候选扫描数由完整冻结键计算。用 `check-queries --scan-mode segmented`
+读取重建后的该批次，核对实际候选行和逐页结果。应用使用同一模式读取快照。
+
 用 `explain --where FILE --source-contract FILE --target-contract FILE` 查看类型化范围。
 报告用十六进制表示字段 ID，可表达任何二进制字段名。USGS 案例的目标布局固定 `network`，
 `event_type` 阻挡 `time` 区间下推，末批单段扫描 71 条、过滤 38 条、超预算 21 条。
