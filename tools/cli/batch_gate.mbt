@@ -15,6 +15,7 @@ fn measured_batch_queries(forecast : Json, measured : Json) -> Json raise {
       field(row, "fst_scanned") != scanned ||
       field(row, "max_target_scanned") != budget ||
       field(row, "matched") != field(predicted, "matched") ||
+      optional(row, "bounded_scan") != optional(predicted, "bounded_scan") ||
       field(row, "results_match") != Json::boolean(true) ||
       field(row, "pagination_match") != Json::boolean(true) {
       invalid("measured query differs from forecast: " + text(field(row, "id")))
@@ -30,6 +31,14 @@ fn measured_batch_queries(forecast : Json, measured : Json) -> Json raise {
         "pagination_match",
       ] {
       evidence.push((name, field(row, name)))
+    }
+    if optional(row, "bounded_scan") is Some(scan) {
+      for
+        name in [
+          "max_target_windows", "rank_windows", "keys_examined", "single_scanned",
+        ] {
+        evidence.push((name, field(scan, name)))
+      }
     }
     queries.push(object(evidence))
   }
@@ -52,8 +61,14 @@ async fn gate_batch(args : Array[String]) -> Unit {
     @fs.mkdir(out, allow_exist=false)
     let out = @fs.realpath(out)
     let receipt = out + "/batch-receipt.json"
+    let schema_version = if options.paths.get("--scan-mode")
+      is Some(["bounded"]) {
+      2
+    } else {
+      1
+    }
     let evidence = [
-      ("schema_version", Json::number(1)),
+      ("schema_version", Json::number(schema_version.to_double())),
       ("kind", Json::string("batch-delivery")),
       ("run_id", Json::string(@async.now().to_string())),
       ("version", Json::string(tool_version)),
@@ -68,10 +83,9 @@ async fn gate_batch(args : Array[String]) -> Unit {
     )
     let mut stage = "selection"
     let (result, code) = try {
-      let mode = options.path("--scan-mode")
-      let segmented = segmented_mode(mode)
+      let mode = scan_mode(options.path("--scan-mode"))
       let id = options.path("--batch-id")
-      evidence.push(("scan_mode", Json::string(mode)))
+      evidence.push(("scan_mode", Json::string(mode.label())))
       evidence.push(("batch_id", Json::string(id)))
       let selection = @fs.realpath(options.path("--selection"))
       let expected = options.path("--selection-sha256").to_lower()
@@ -85,7 +99,7 @@ async fn gate_batch(args : Array[String]) -> Unit {
       let raw = read(batch_file, maximum=1048576)
       let batch_hash = Json::string(hash(raw))
       evidence.push(("batches_sha256", batch_hash))
-      let audit = audit_report(options, true, segmented~, only_batch=Some(id))
+      let audit = audit_report(options, true, mode~, only_batch=Some(id))
       if optional(audit, "error") is Some(error) {
         invalid(text(error))
       }
@@ -140,7 +154,7 @@ async fn gate_batch(args : Array[String]) -> Unit {
         queries,
         out,
         replay_source=false,
-        segmented~,
+        mode~,
         evidence=true,
       )
       let measured = measured_batch_queries(

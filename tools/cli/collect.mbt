@@ -57,6 +57,9 @@ async fn collect_queries(args : Array[String]) -> Unit {
     }
     try {
       let query = @json.parse(line, reject_duplicate_keys=true)
+      if optional(query, "max_target_windows") is Some(_) {
+        invalid("set max_target_windows in the frozen workload after capture")
+      }
       let predicate = parse_query(query)
       predicate.plan(source) |> ignore
       let page_size = positive_integer(query, "page_size", 100)

@@ -28,6 +28,13 @@ async fn prepare_selection(args : Array[String]) -> SelectedLayout {
     invalid("unsupported selection version")
   }
   let input = layout_input(options)
+  for query in input.queries {
+    if query.window_budget is Some(_) {
+      invalid(
+        "use build and gate-batch --scan-mode bounded for a window budget",
+      )
+    }
+  }
   if field(selection, "digests") != input.digests {
     invalid("selection inputs changed")
   }

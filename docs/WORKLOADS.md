@@ -114,3 +114,15 @@ orderkey plan-ranges --out late-index --where where.json --max-windows 4
 在冻结快照的有序键清单中找出全部命中，裁去首尾并跳过最多三个最大的空隙。
 输出的 `rank_windows` 是从零开始的半开位置区间。`planned_scanned` 是给定区间上限下的最少候选行数，
 `keys_examined` 是离线规划评估谓词的键数。支持 1–16 个逻辑区间。
+
+在冻结工作负载的每条查询中显式写入 `max_target_windows` 和 `max_target_scanned`。
+用 `compare-layouts` 从训练数据生成选型，再用 `build` 和选中的目标契约重建末批快照。
+按批准的选型 SHA-256 运行批次验收。
+
+~~~sh
+orderkey gate-batch --selection selection --selection-sha256 APPROVED_SHA256 --batches batches-4.json --batch-id late --delivery late-index --scan-mode bounded --out bounded-gate
+~~~
+
+v2 回执记录批次、快照清单、工作负载、按顺序返回的结果摘要及实际批准的区间。
+用 `query-approved` 或 SDK 的 `ApprovedReader` 读取，分页沿用批准的区间，扫描上限按整个查询计算。
+区间预算限制不同逻辑区间的数量。规划检查的键数与引擎返回的候选记录数分别报告。

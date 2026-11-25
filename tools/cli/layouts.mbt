@@ -49,6 +49,7 @@ struct LayoutQuery {
   equality : Array[Bytes]
   interval : Bytes?
   budget : Int32
+  window_budget : Int32?
   weight : Int32
   allow_order_change : Bool
   source_plan : @orderkey.QueryPlan
@@ -187,6 +188,7 @@ async fn layout_input(options : LayoutOptions) -> LayoutInput {
       equality,
       interval,
       budget: positive_integer(query, "max_target_scanned", 100000),
+      window_budget: query_window_budget(query),
       weight: positive_integer(weights, id, 1),
       allow_order_change: allow.contains(id),
       source_plan,
@@ -286,7 +288,7 @@ fn evaluate_layout(
   input : LayoutInput,
   target : @orderkey.IndexContract,
   baseline : Bool,
-  segmented~ : Bool = false,
+  mode~ : ScanMode = Single,
 ) -> LayoutScore raise {
   let keys = if baseline {
     input.rows.map(row => row.key)
@@ -310,10 +312,25 @@ fn evaluate_layout(
     } else {
       query.predicate.plan(target)
     }
-    let split = if segmented { Some(plan.segment_ranges(keys)) } else { None }
-    let scanned = match split {
-      Some(scan) => scan.planned_scanned
-      None => scan_count(keys, plan.byte_range())
+    let (scanned, scan_details) = match mode {
+      Single => (scan_count(keys, plan.byte_range()), [])
+      Segmented => {
+        let scan = plan.segment_ranges(keys)
+        (scan.planned_scanned, [("segmented_scan", segmented_scan_json(scan))])
+      }
+      Bounded => {
+        guard query.window_budget is Some(maximum) else {
+          raise Invalid("missing window budget for " + query.id)
+        }
+        let scan = plan.bounded_ranges(keys, maximum)
+        if scan.matched != query.matched {
+          invalid("bounded plan excludes matches: " + query.id)
+        }
+        (
+          scan.planned_scanned,
+          [("bounded_scan", bounded_scan_json(scan, maximum))],
+        )
+      }
     }
     let source_order = variable_order(source_fields, query.equality)
     let target_order = variable_order(target_fields, query.equality)
@@ -368,9 +385,7 @@ fn evaluate_layout(
           ("order_changed", Json::boolean(changed)),
           ("failures", Json::array(failures)),
         ] +
-        split
-        .map(scan => [("segmented_scan", segmented_scan_json(scan))])
-        .unwrap_or([]),
+        scan_details,
       ),
     )
   }

@@ -1,5 +1,10 @@
 # 版本记录
 
+## v0.1.18
+
+- `gate-batch --scan-mode bounded` 锁定扫描行数与区间数两项预算，核对实际 MoonLSM 和 MoonFST 候选、顺序与分页。
+- `ApprovedReader` 按 v2 回执记载的区间读取，支持原 v1 回执，并拒绝跨批准续页。
+
 ## v0.1.17
 
 - `plan-ranges` 在完整冻结键上计算给定区间数下的最少候选扫描量。区间按键顺序排列，保留全部命中。

@@ -28,7 +28,8 @@ def gate_batch(exe, selection, batches, batch_id, delivery, mode, out, expected)
     assert completed.returncode == expected, (completed.stdout, completed.stderr)
     receipt = read_json(out / "batch-receipt.json")
     assert receipt == json.loads(completed.stdout)
-    assert receipt["kind"] == "batch-delivery" and receipt["schema_version"] == 1
+    assert receipt["kind"] == "batch-delivery"
+    assert receipt["schema_version"] == (2 if mode == "bounded" else 1)
     assert receipt["ready"] == (expected == 0)
     assert receipt["status"] == {0: "passed", 1: "regression", 2: "invalid"}[expected]
     return receipt

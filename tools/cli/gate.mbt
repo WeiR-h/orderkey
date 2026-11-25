@@ -108,7 +108,7 @@ async fn gate_selected(args : Array[String]) -> Unit {
     let mut stage = "selection"
     let (report, code) = try {
       let mode = option(args, "--scan-mode", fallback="single")
-      let segmented = segmented_mode(mode)
+      let strategy = legacy_scan_mode(mode)
       evidence.push(("scan_mode", Json::string(mode)))
       let expected = options.path("--selection-sha256").to_lower()
       let selection_path = options.path("--selection") + "/selection.json"
@@ -150,7 +150,7 @@ async fn gate_selected(args : Array[String]) -> Unit {
         ("training_measured_queries", field(selection, "predictions")),
       )
       stage = "audit"
-      let audit = audit_report(options, true, segmented~)
+      let audit = audit_report(options, true, mode=strategy)
       evidence.push(("batches", summarize_gate_batches(audit)))
       if optional(audit, "error") is Some(error) {
         invalid(text(error))

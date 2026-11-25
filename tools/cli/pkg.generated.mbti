@@ -21,6 +21,8 @@ type LayoutScore
 
 type Row
 
+type ScanMode
+
 type SelectedLayout
 
 // Type aliases

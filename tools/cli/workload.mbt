@@ -98,19 +98,12 @@ async fn workload(
   args : Array[String],
   dir : String,
   replay_source~ : Bool = true,
-  segmented~ : Bool = false,
+  mode~ : ScanMode = Single,
 ) -> Json {
   let input = persisted_input(dir)
   let path = option(args, "--queries")
   let raw = read(path, maximum=1048576)
-  let measured = measure_workload(
-    dir,
-    input,
-    raw,
-    dir,
-    replay_source~,
-    segmented~,
-  )
+  let measured = measure_workload(dir, input, raw, dir, replay_source~, mode~)
   if persisted_input(dir).fingerprint != input.fingerprint ||
     read(path, maximum=1048576) != raw {
     invalid("input or workload changed during verification")
@@ -125,7 +118,7 @@ async fn measure_workload(
   raw : Bytes,
   scratch_root : String,
   replay_source~ : Bool = true,
-  segmented~ : Bool = false,
+  mode~ : ScanMode = Single,
   evidence~ : Bool = false,
 ) -> Json {
   let manifest = require_ready(dir)
@@ -173,6 +166,8 @@ async fn measure_workload(
       let target_plan = predicate.plan(input.target)
       let page_size = positive_integer(query, "page_size", 100)
       let budget = positive_integer(query, "max_target_scanned", 100000)
+      let window_budget = query_window_budget(query)
+      mode.require_window_budget(window_budget)
       let source_scanned = if replay_source {
         probe_database(
           scratch + "/source",
@@ -182,15 +177,20 @@ async fn measure_workload(
       } else {
         source.filter(row => source_plan.byte_range().contains(row.key))
       }
-      let split = if segmented {
+      let split = if mode is Segmented {
         Some(reader.plan_segmented(predicate))
       } else {
         None
       }
+      let bounded = window_budget.map(maximum => {
+        reader.plan_bounded(predicate, maximum)
+      })
       let scan = split.map(plan => plan.scan())
-      let windows = scan
-        .map(info => info.windows)
-        .unwrap_or([target_plan.byte_range()])
+      let windows = match (bounded, scan) {
+        (Some(plan), _) => plan.windows()
+        (None, Some(info)) => info.windows
+        _ => [target_plan.byte_range()]
+      }
       let target_scanned = probe_database(
         scratch + "/target",
         windows,
@@ -213,9 +213,12 @@ async fn measure_workload(
       let mut cursor : Bytes? = None
       let mut fst_scanned = 0
       while true {
-        let page = match split {
-          Some(plan) => reader.query_segmented(plan, limit=page_size, cursor~)
-          None => reader.query(predicate, limit=page_size, cursor~)
+        let page = match (bounded, split) {
+          (Some(plan), _) =>
+            reader.query_bounded(plan, limit=page_size, cursor~)
+          (None, Some(plan)) =>
+            reader.query_segmented(plan, limit=page_size, cursor~)
+          _ => reader.query(predicate, limit=page_size, cursor~)
         }
         fst_scanned += page.scanned
         for row in page.rows {
@@ -235,6 +238,18 @@ async fn measure_workload(
       }
       if scan is Some(plan) && plan.planned_scanned != fst_scanned {
         invalid("segmented prediction differs from measured scan count")
+      }
+      let bounded_fields = if bounded is Some(plan) &&
+        window_budget is Some(maximum) {
+        let info = plan.scan()
+        if info.planned_scanned != fst_scanned ||
+          info.matched != pages.length() ||
+          windows.length() > maximum {
+          invalid("bounded prediction differs from measured scan")
+        }
+        [("bounded_scan", bounded_scan_json(info, maximum))]
+      } else {
+        []
       }
       let within_budget = target_scanned.length() <= budget
       if !within_budget {
@@ -277,6 +292,7 @@ async fn measure_workload(
           scan
           .map(info => [("segmented_scan", segmented_scan_json(info))])
           .unwrap_or([]) +
+          bounded_fields +
           (if evidence {
             [
               ("page_size", Json::number(page_size.to_double())),
@@ -301,7 +317,7 @@ async fn measure_workload(
   object([
     ("schema_version", Json::number(1)),
     ("workload_passed", Json::boolean(passed)),
-    ("scan_mode", Json::string(if segmented { "segmented" } else { "single" })),
+    ("scan_mode", Json::string(mode.label())),
     ("cutover_ready", Json::boolean(passed)),
     ("data_ready", Json::boolean(true)),
     ("version", Json::string(tool_version)),
@@ -362,10 +378,8 @@ async fn check_queries(args : Array[String], dir : String) -> Unit {
     ]),
   )
   let result = try {
-    let segmented = segmented_mode(
-      option(args, "--scan-mode", fallback="single"),
-    )
-    workload(args, dir, segmented~)
+    let mode = scan_mode(option(args, "--scan-mode", fallback="single"))
+    workload(args, dir, mode~)
   } catch {
     error => {
       atomic_json(

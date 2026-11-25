@@ -63,7 +63,7 @@ fn batch_inventory(raw : Bytes) -> Array[Json] raise {
 async fn audit_report(
   options : LayoutOptions,
   locked : Bool,
-  segmented~ : Bool = false,
+  mode~ : ScanMode = Single,
   only_batch~ : String? = None,
 ) -> Json {
   let reports = []
@@ -117,7 +117,10 @@ async fn audit_report(
         }
         hashes.push(data_hash)
         let source_score = evaluate_layout(input, input.source, true)
-        let target_score = evaluate_layout(input, target, false, segmented~)
+        for query in input.queries {
+          mode.require_window_budget(query.window_budget)
+        }
+        let target_score = evaluate_layout(input, target, false, mode~)
         verified_inputs.push((paths, input.digests))
         if !target_score.eligible {
           regression = true
@@ -178,10 +181,7 @@ async fn audit_report(
       ("ready", Json::boolean(status == "passed")),
       ("status", Json::string(status)),
       ("locked", Json::boolean(locked)),
-      (
-        "scan_mode",
-        Json::string(if segmented { "segmented" } else { "single" }),
-      ),
+      ("scan_mode", Json::string(mode.label())),
       ("selection_sha256", Json::string(hash(selected_raw))),
       ("batches_sha256", Json::string(hash(raw))),
       ("target_contract_sha256", target_digest),
@@ -206,10 +206,10 @@ async fn audit_layout(args : Array[String]) -> Unit {
     ["--selection", "--batches", "--out", "--scan-mode"],
     ["--locked"],
   )
-  let segmented = segmented_mode(option(args, "--scan-mode", fallback="single"))
+  let mode = scan_mode(option(args, "--scan-mode", fallback="single"))
   let locked = options.switches.contains("--locked")
-  if segmented && !locked {
-    invalid("segmented audit requires --locked")
+  if !(mode is Single) && !locked {
+    invalid(mode.label() + " audit requires --locked")
   }
   let out = options.path("--out")
   @fs.mkdir(out, allow_exist=false)
@@ -223,7 +223,7 @@ async fn audit_layout(args : Array[String]) -> Unit {
       ("batches", Json::array([])),
     ]),
   )
-  let report = audit_report(options, locked, segmented~)
+  let report = audit_report(options, locked, mode~)
   atomic_json(report_path, report)
   println(report.stringify())
   if field(report, "ready") != Json::boolean(true) {

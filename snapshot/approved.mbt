@@ -3,6 +3,7 @@ struct ApprovedQuery {
   predicate_sha256 : String
   page_size : Int32
   scanned : Int32
+  rank_windows : Array[(Int32, Int32)]?
 }
 
 ///|
@@ -16,13 +17,57 @@ pub struct ApprovedReader {
 
 ///|
 fn receipt_count(value : Json, name : String, minimum : Int32) -> Int32 raise {
-  guard property(value, name) is Number(n, ..) &&
+  receipt_integer(property(value, name), name, minimum)
+}
+
+///|
+fn receipt_integer(value : Json, name : String, minimum : Int32) -> Int32 raise {
+  guard value is Number(n, ..) &&
     n >= minimum.to_double() &&
     n <= 100000.0 &&
     n == n.to_int().to_double() else {
     raise InvalidSnapshot("invalid receipt count: " + name)
   }
   n.to_int()
+}
+
+///|
+fn receipt_windows(
+  entry : Json,
+  snapshot_rows : Int32,
+  scanned : Int32,
+) -> Array[(Int32, Int32)] raise {
+  let maximum = receipt_count(entry, "max_target_windows", 1)
+  let matched = receipt_count(entry, "matched", 0)
+  guard property(entry, "rank_windows") is Array(windows) &&
+    maximum <= 16 &&
+    windows.length() <= maximum &&
+    matched <= scanned &&
+    (matched == 0) == windows.is_empty() else {
+    raise InvalidSnapshot("inconsistent approved rank windows")
+  }
+  let mut previous_end = -1
+  let mut total = 0
+  let spans = []
+  for window in windows {
+    guard window is Array([first, last]) else {
+      raise InvalidSnapshot("expected a half-open rank pair")
+    }
+    let start = receipt_integer(first, "rank start", 0)
+    let end = receipt_integer(last, "rank end", 1)
+    if start <= previous_end || start >= end || end > snapshot_rows {
+      raise InvalidSnapshot(
+        "rank windows must be ordered, separated, and within the snapshot",
+      )
+    }
+    spans.push((start, end))
+    previous_end = end
+    total += end - start
+  }
+  if total != scanned {
+    raise InvalidSnapshot("approved rank windows differ from scan count")
+  }
+  spans
 }
 
 ///|
@@ -38,15 +83,17 @@ pub async fn ApprovedReader::open(
     raise InvalidSnapshot("batch receipt SHA-256 differs from approval")
   }
   let result = parse(raw)
+  let schema_version = property(result, "schema_version")
   if property(result, "kind") != Json::string("batch-delivery") ||
-    property(result, "schema_version") != Json::number(1) ||
     property(result, "ready") != Json::boolean(true) ||
     property(result, "status") != Json::string("passed") {
     raise InvalidSnapshot("batch receipt is not approved")
   }
-  let segmented = match string(property(result, "scan_mode")) {
-    "single" => false
-    "segmented" => true
+  let (segmented, bounded) = match
+    (schema_version, string(property(result, "scan_mode"))) {
+    (Number(1.0, ..), "single") => (false, false)
+    (Number(1.0, ..), "segmented") => (true, false)
+    (Number(2.0, ..), "bounded") => (false, true)
     _ => raise InvalidSnapshot("unknown approved scan mode")
   }
   guard property(result, "queries") is Array(entries) &&
@@ -54,6 +101,7 @@ pub async fn ApprovedReader::open(
     entries.length() <= 100 else {
     raise InvalidSnapshot("invalid approved query set")
   }
+  let snapshot_rows = receipt_count(result, "snapshot_rows", 0)
   let queries = Map([])
   for entry in entries {
     let id = string(property(entry, "id"))
@@ -71,7 +119,12 @@ pub async fn ApprovedReader::open(
       property(entry, "within_budget") != Json::boolean(true) {
       raise InvalidSnapshot("inconsistent approved query evidence")
     }
-    queries[id] = { predicate_sha256, page_size, scanned, }
+    let rank_windows = if bounded {
+      Some(receipt_windows(entry, snapshot_rows, scanned))
+    } else {
+      None
+    }
+    queries[id] = { predicate_sha256, page_size, scanned, rank_windows, }
   }
   let expected_manifest = string(property(result, "manifest_sha256"))
   let reader = open_candidate(
@@ -80,7 +133,7 @@ pub async fn ApprovedReader::open(
   )
   if property(result, "target_contract_sha256") !=
     Json::string(digest(reader.contract().to_bytes())) ||
-    receipt_count(result, "snapshot_rows", 0) != reader.row_count() {
+    snapshot_rows != reader.row_count() {
     raise InvalidSnapshot(
       "batch receipt does not match snapshot contract or row count",
     )
@@ -102,7 +155,10 @@ pub fn ApprovedReader::query(
   if digest(query.to_bytes()) != approved.predicate_sha256 {
     raise InvalidSnapshot("query predicate differs from batch receipt")
   }
-  let (plan, windows) = if self.segmented {
+  let (plan, windows) = if approved.rank_windows is Some(ranks) {
+    let plan = self.reader.plan(query)
+    (plan, self.reader.ranked_windows(plan.byte_range(), ranks))
+  } else if self.segmented {
     let split = self.reader.plan_segmented(query)
     if split.scan.planned_scanned != approved.scanned {
       raise InvalidSnapshot("segmented scan differs from batch receipt")

@@ -31,7 +31,9 @@ fn predicate_value(value : Json) -> @orderkey.Value raise {
 
 ///|
 fn parse_query(value : Json) -> @orderkey.QuerySpec raise {
-  only_fields(value, ["id", "eq", "range", "page_size", "max_target_scanned"])
+  only_fields(value, [
+    "id", "eq", "range", "page_size", "max_target_scanned", "max_target_windows",
+  ])
   let equalities = []
   match optional(value, "eq") {
     None => ()
@@ -142,11 +144,65 @@ async fn plan_ranges(args : Array[String]) -> Unit {
 }
 
 ///|
-fn segmented_mode(mode : String) -> Bool raise {
-  match mode {
-    "single" => false
-    "segmented" => true
-    _ => raise Invalid("scan mode must be single or segmented")
+enum ScanMode {
+  Single
+  Segmented
+  Bounded
+}
+
+///|
+fn scan_mode(raw : String) -> ScanMode raise {
+  match raw {
+    "single" => Single
+    "segmented" => Segmented
+    "bounded" => Bounded
+    _ => raise Invalid("scan mode must be single, segmented, or bounded")
+  }
+}
+
+///|
+fn ScanMode::label(self : ScanMode) -> String {
+  match self {
+    Single => "single"
+    Segmented => "segmented"
+    Bounded => "bounded"
+  }
+}
+
+///|
+fn legacy_scan_mode(raw : String) -> ScanMode raise {
+  let mode = scan_mode(raw)
+  if mode is Bounded {
+    invalid("bounded mode requires batch verification or an approved read")
+  }
+  mode
+}
+
+///|
+fn query_window_budget(query : Json) -> Int32? raise {
+  if optional(query, "max_target_windows") is None {
+    return None
+  }
+  let maximum = positive_integer(query, "max_target_windows", 0)
+  if maximum > 16 || optional(query, "max_target_scanned") is None {
+    invalid(
+      "window budget requires max_target_windows in 1..16 and explicit max_target_scanned",
+    )
+  }
+  Some(maximum)
+}
+
+///|
+fn ScanMode::require_window_budget(
+  self : ScanMode,
+  budget : Int32?,
+) -> Unit raise {
+  match (self, budget) {
+    (Bounded, None) =>
+      invalid("bounded mode requires max_target_windows for every query")
+    (Single | Segmented, Some(_)) =>
+      invalid("max_target_windows requires bounded mode")
+    _ => ()
   }
 }
 
@@ -171,9 +227,10 @@ async fn semantic_query(args : Array[String], dir : String) -> Unit {
   let token = option(args, "--cursor")
   let limit = @string.parse_int(option(args, "--limit", fallback="100"))
   let cursor = if token == "" { None } else { Some(decode(token)) }
-  let (page, scan) = if segmented_mode(
+  let (page, scan) = if legacy_scan_mode(
       option(args, "--scan-mode", fallback="single"),
-    ) {
+    )
+    is Segmented {
     let plan = reader.plan_segmented(query)
     (
       reader.query_segmented(plan, limit~, cursor~),
