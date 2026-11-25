@@ -145,6 +145,47 @@ def verify_approved_replay(root, exe):
             "receipt_sha256": trusted, "result_sha256": actual}
 
 
+def verify_bounded_replay(root):
+    started = time.perf_counter()
+    args = ["cmd", "/d", "/c", "replay-bounded.cmd"] if os.name == "nt" else ["sh", "replay-bounded.sh"]
+    replay = subprocess.run([*args, "bounded replay"], cwd=root, timeout=300,
+                            encoding="utf-8", capture_output=True)
+    assert replay.returncode == 0, (replay.stdout, replay.stderr)
+    out = root / "bounded replay"
+    expected = read_json(root / "verification/bounded-report.json")["approval"]
+    denied, passed = (read_json(out / f"cap-{limit}/batch-receipt.json") for limit in (3, 4))
+    assert denied["status"] == "regression" and not denied["ready"]
+    assert passed["status"] == "passed" and passed["ready"]
+    assert denied["manifest_sha256"] == passed["manifest_sha256"]
+    assert passed["manifest_sha256"] == hashlib.sha256((out / "late-index/manifest.json").read_bytes()).hexdigest()
+    for limit, count, receipt in ((3, 673, denied), (4, 646, passed)):
+        query, = receipt["queries"]
+        measured, = expected[f"cap_{limit}"]["queries"]
+        assert receipt["schema_version"] == 2 and receipt["scan_mode"] == "bounded"
+        assert receipt["snapshot_rows"] == 1516 and receipt["selection_sha256"] == expected[f"cap_{limit}"]["selection_sha256"]
+        assert query["predicted_scanned"] == query["target_scanned"] == query["fst_scanned"] == count
+        assert (query["max_target_scanned"], query["max_target_windows"], query["matched"]) == (650, limit, 593)
+        assert query["ordered_result_sha256"] == measured["ordered_result_sha256"]
+        assert query["rank_windows"] == measured["rank_windows"]
+    assert denied["queries"][0]["ordered_result_sha256"] == passed["queries"][0]["ordered_result_sha256"]
+    approved = out / "cap-4/batch-receipt.json"
+    other = out / "other-approval/batch-receipt.json"
+    assert read_json(other)["ready"]
+    trusted = (out / "receipt.sha256").read_text(encoding="ascii").strip()
+    assert trusted == hashlib.sha256(approved.read_bytes()).hexdigest()
+    assert trusted != hashlib.sha256(other.read_bytes()).hexdigest()
+    consumer = read_json(out / "consumer.json")
+    assert consumer["ready"] and consumer["scanned"] == 646
+    assert consumer["pages"] == [31] * 19 + [4] and len(consumer["values"]) == 593
+    assert consumer["cross_receipt_cursor_rejected"]
+    digest = hashlib.sha256("\n".join(consumer["values"]).encode()).hexdigest()
+    assert digest == expected["sqlite_payload_sha256"]
+    return {"ready": True, "seconds": time.perf_counter() - started, "snapshot_rows": 1516,
+            "cap_3_scanned": 673, "cap_4_scanned": 646, "budget": 650, "matched": 593,
+            "receipts": {"rejected": denied, "approved": passed},
+            "cross_receipt_cursor_rejected": True, "result_sha256": digest}
+
+
 def verify_archive(path, parent):
     with tempfile.TemporaryDirectory(prefix="distribution-", dir=parent) as temp:
         root = Path(temp)
@@ -166,6 +207,7 @@ def verify_archive(path, parent):
         gate_replay = verify_gate_replay(root)
         segmented_replay = verify_segmented_replay(root)
         approved_replay = verify_approved_replay(root, exe)
+        bounded_replay = verify_bounded_replay(root)
         current = verify_current_cases(root, exe)
         cases = []
         for name, matches in (("telemetry", 18), ("weather", 29)):
@@ -195,6 +237,7 @@ def verify_archive(path, parent):
             cases.append({"case": name, "rows": matches})
     return {"ready": True, "build": version, "cases": cases, "adoption": current, "gate_replay": gate_replay,
             "segmented_replay": segmented_replay, "approved_replay": approved_replay,
+            "bounded_replay": bounded_replay,
             "archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 

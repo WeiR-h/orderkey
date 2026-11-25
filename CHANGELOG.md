@@ -1,5 +1,10 @@
 # 版本记录
 
+## v0.1.19
+
+- Windows 与 Linux 发行包新增 `replay-bounded`，复现三段拒绝、四段通过、20 页批准读取以及跨回执续页拒绝。
+- 发行包附真实 USGS 冻结输入、机器可读证据、技术摘要和 90 秒演示。
+
 ## v0.1.18
 
 - `gate-batch --scan-mode bounded` 锁定扫描行数与区间数两项预算，核对实际 MoonLSM 和 MoonFST 候选、顺序与分页。

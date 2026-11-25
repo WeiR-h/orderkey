@@ -6,3 +6,5 @@
 /examples/earthquakes/replay-segmented.cmd text eol=crlf
 /examples/earthquakes/replay-approved.sh text eol=lf
 /examples/earthquakes/replay-approved.cmd text eol=crlf
+/examples/earthquakes/replay-bounded.sh text eol=lf
+/examples/earthquakes/replay-bounded.cmd text eol=crlf

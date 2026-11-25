@@ -1,5 +1,21 @@
 # 约 90 秒演示
 
+## v0.1.19 在两个预算内读取同一快照
+
+解压发行包，Windows 运行 `replay-bounded.cmd`，Linux 运行 `sh replay-bounded.sh`。
+默认把证据写入 `bounded-replay`。可传入一个新目录名重新复验。
+
+| 时间 | 展示 | 证据 |
+|---|---|---|
+| 0–18 秒 | 1,516 条冻结记录，跨网络查询命中 593 条，候选预算 650 条 | `late-index/manifest.json` |
+| 18–36 秒 | 3 个逻辑区间至少扫描 673 条，MoonLSM 与 MoonFST 实测一致，验收拒绝 | `cap-3/batch-receipt.json` |
+| 36–56 秒 | 4 个逻辑区间将候选降到 646 条，验收通过 | `cap-4/batch-receipt.json` |
+| 56–74 秒 | SDK 从批准的区间读完 20 页，载荷和次序与 SQLite 一致 | `consumer.json` |
+| 74–90 秒 | 用同一快照的另一份有效回执继续读第一页游标，SDK 拒绝 | `consumer.json` 中的 `cross_receipt_cursor_rejected` |
+
+两份选型分别锁定 3 和 4 的区间预算。演示用本地计算的回执摘要交接。
+实际发布时，由可信发布配置传递批准的 SHA-256。 [下载与双平台报告](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.19)
+
 ## v0.1.16 验收并读取同一份快照
 
 解压对应平台 ZIP。Windows 运行 `replay-approved.cmd`，Linux 运行
