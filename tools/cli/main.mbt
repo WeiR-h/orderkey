@@ -97,6 +97,10 @@ async fn execute(args : Array[String]) -> Unit {
     explain(args)
     return
   }
+  if command == "plan-ranges" {
+    plan_ranges(args)
+    return
+  }
   if command == "compare-layouts" {
     compare_layouts(args)
     return
@@ -253,7 +257,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|build|resume|verify|verify-delivery|query|query-approved|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
+      " version|plan|plan-ranges|build|resume|verify|verify-delivery|query|query-approved|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
     )
     return
   }

@@ -104,3 +104,13 @@ orderkey query-approved --out late-index --receipt late-gate/batch-receipt.json 
 将上一页的 `cursor` 传入 `--cursor` 继续，直到返回 `null`。
 SDK 对应接口为 `ApprovedReader::open(snapshot, receipt, expected_sha256)`
 及 `reader.query(id, query, cursor~)`。不同回执、候选或查询之间的游标不可通用。
+
+## 规划有限数量的区间
+
+~~~sh
+orderkey plan-ranges --out late-index --where where.json --max-windows 4
+~~~
+
+在冻结快照的有序键清单中找出全部命中，裁去首尾并跳过最多三个最大的空隙。
+输出的 `rank_windows` 是从零开始的半开位置区间。`planned_scanned` 是给定区间上限下的最少候选行数，
+`keys_examined` 是离线规划评估谓词的键数。支持 1–16 个逻辑区间。

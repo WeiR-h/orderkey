@@ -108,6 +108,40 @@ async fn explain(args : Array[String]) -> Unit {
 }
 
 ///|
+fn rank_windows_json(ranks : Array[(Int32, Int32)]) -> Json {
+  Json::array(
+    ranks.map(window => {
+      Json::array([
+        Json::number(window.0.to_double()),
+        Json::number(window.1.to_double()),
+      ])
+    }),
+  )
+}
+
+///|
+fn bounded_scan_json(scan : @orderkey.BoundedScan, max_windows : Int32) -> Json {
+  object([
+    ("single_scanned", Json::number(scan.single_scanned.to_double())),
+    ("planned_scanned", Json::number(scan.planned_scanned.to_double())),
+    ("matched", Json::number(scan.matched.to_double())),
+    ("keys_examined", Json::number(scan.keys_examined.to_double())),
+    ("max_target_windows", Json::number(max_windows.to_double())),
+    ("rank_windows", rank_windows_json(scan.rank_windows)),
+  ])
+}
+
+///|
+async fn plan_ranges(args : Array[String]) -> Unit {
+  let options = layout_options(args, ["--out", "--where", "--max-windows"], [])
+  let query = parse_query(json_file(options.path("--where")))
+  let max_windows = @string.parse_int(options.path("--max-windows"))
+  let reader = @snapshot.Reader::open(options.path("--out"))
+  let plan = reader.plan_bounded(query, max_windows)
+  println(bounded_scan_json(plan.scan(), max_windows).stringify())
+}
+
+///|
 fn segmented_mode(mode : String) -> Bool raise {
   match mode {
     "single" => false

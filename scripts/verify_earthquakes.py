@@ -24,15 +24,19 @@ def write_lf_json(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
-def cases(base):
-    base.mkdir()
+def frozen_events():
     raw = CASE / "events.tsv"
     assert hashlib.sha256(raw.read_bytes()).hexdigest() == (
         "7b62b108bc7154139ef794c5dcafcab153387dc3882d185168e234ae9a986cd8")
     with raw.open(encoding="ascii", newline="") as stream:
-        rows = [(r["event_type"].encode(), r["network"].encode(),
+        return [(r["event_type"].encode(), r["network"].encode(),
                  int(r["time_ms"]), r["event_id"].encode())
                 for r in csv.DictReader(stream, delimiter="\t")]
+
+
+def cases(base):
+    base.mkdir()
+    rows = frozen_events()
     fields = [{"id": name, "kind": kind, "direction": direction}
               for name, kind, direction in [
                   ("event_type", "bytes", "asc"), ("network", "bytes", "asc"),

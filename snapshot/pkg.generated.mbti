@@ -21,6 +21,12 @@ pub struct ApprovedReader {
 pub async fn ApprovedReader::open(String, String, String) -> Self
 pub fn ApprovedReader::query(Self, String, @orderkey.QuerySpec, cursor? : Bytes?) -> Page raise
 
+pub struct BoundedQuery {
+  // private fields
+}
+pub fn BoundedQuery::scan(Self) -> @orderkey.BoundedScan
+pub fn BoundedQuery::windows(Self) -> Array[@orderkey.ByteRange]
+
 pub(all) struct Page {
   rows : Array[Record]
   cursor : Bytes?
@@ -35,8 +41,10 @@ pub fn Reader::loaded_bytes(Self) -> Int64
 pub async fn Reader::open(String) -> Self
 pub async fn Reader::open_selected(String, expected_selection_sha256? : String) -> Self
 pub fn Reader::plan(Self, @orderkey.QuerySpec) -> @orderkey.QueryPlan raise
+pub fn Reader::plan_bounded(Self, @orderkey.QuerySpec, Int32) -> BoundedQuery raise
 pub fn Reader::plan_segmented(Self, @orderkey.QuerySpec) -> SegmentedQuery raise
 pub fn Reader::query(Self, @orderkey.QuerySpec, limit? : Int32, cursor? : Bytes?) -> Page raise
+pub fn Reader::query_bounded(Self, BoundedQuery, limit? : Int32, cursor? : Bytes?) -> Page raise
 pub fn Reader::query_segmented(Self, SegmentedQuery, limit? : Int32, cursor? : Bytes?) -> Page raise
 pub fn Reader::row_count(Self) -> Int32
 

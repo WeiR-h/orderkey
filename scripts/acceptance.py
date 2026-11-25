@@ -33,6 +33,7 @@ def main():
            [sys.executable,'scripts/verify_gate.py','--report',str(OUT/'gate-report.json')],
            [sys.executable,'scripts/verify_earthquakes.py','--report',str(OUT/'earthquakes-report.json')],
            [sys.executable,'scripts/verify_segmented.py','--report',str(OUT/'segmented-report.json')],
+           [sys.executable,'scripts/verify_bounded.py','--report',str(OUT/'bounded-report.json')],
            [sys.executable,'scripts/verify_batch.py','--report',str(OUT/'batch-report.json')],
            [sys.executable,'scripts/verify_snapshot.py','--report',str(OUT/'snapshot-report.json')],
            [sys.executable,'scripts/verify_consumer.py','--report',str(OUT/'consumer-report.json')],

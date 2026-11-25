@@ -53,6 +53,14 @@ pub(all) enum Bound {
   Exclusive(Value)
 }
 
+pub(all) struct BoundedScan {
+  rank_windows : Array[(Int32, Int32)]
+  single_scanned : Int32
+  planned_scanned : Int32
+  matched : Int32
+  keys_examined : Int32
+}
+
 #derive(Eq, @debug.Debug)
 pub(all) enum ByteRange {
   Empty
@@ -105,6 +113,7 @@ pub struct QueryPlan {
   // private fields
 }
 pub fn QueryPlan::access(Self) -> String
+pub fn QueryPlan::bounded_ranges(Self, Array[Bytes], Int32) -> BoundedScan raise
 pub fn QueryPlan::byte_range(Self) -> ByteRange
 pub fn QueryPlan::matches(Self, Bytes) -> Bool raise KeyError
 pub fn QueryPlan::prefix_fields(Self) -> Int32
