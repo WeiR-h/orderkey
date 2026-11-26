@@ -1,5 +1,21 @@
 # 约 90 秒演示
 
+## v0.1.22 从选型、恢复到批准读取
+
+解压发行包后，Windows 运行 `replay-bounded-selection.cmd`，Linux 运行 `sh replay-bounded-selection.sh`。
+默认输出到 `bounded-selection-replay`，可传入一个新目录名。
+
+| 时间 | 展示 | 证据 |
+|---|---|---|
+| 0–15 秒 | 两周训练批中的单段选型报无可行布局 | `legacy/comparison.json` |
+| 15–32 秒 | 相同数据按两个预算选型，4 区间候选扫描预测为 613 | `selection-4/selection.json` |
+| 32–55 秒 | 终止重建进程，严格交付拒绝，使用同一选型恢复 | `interruption.stdout`、`incomplete.stdout`、`training-ready.json` |
+| 55–75 秒 | 重建第三周末批，3 区间扫描 673 条超限，4 区间扫描 646 条通过 | 两份 `batch-receipt.json` |
+| 75–90 秒 | SDK 分 20 页读取 593 条，与 SQLite 一致，跨回执续页被拒绝 | `consumer.json` |
+
+发行包中的 `verification/bounded-selection-report.json` 含 SQLite 与双引擎结果以及恢复和异常检查。
+演示使用发行包内预置的选型摘要。应用部署时通过可信配置交接摘要。 [下载与双平台报告](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.22)
+
 ## v0.1.19 在两个预算内读取同一快照
 
 解压发行包，Windows 运行 `replay-bounded.cmd`，Linux 运行 `sh replay-bounded.sh`。

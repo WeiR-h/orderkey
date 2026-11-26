@@ -41,6 +41,8 @@ def main():
     files[approved_replay] = EARTHQUAKES / approved_replay
     bounded_replay = "replay-bounded.cmd" if os.name == "nt" else "replay-bounded.sh"
     files[bounded_replay] = EARTHQUAKES / bounded_replay
+    selected_replay = "replay-bounded-selection.cmd" if os.name == "nt" else "replay-bounded-selection.sh"
+    files[selected_replay] = EARTHQUAKES / selected_replay
     files[CONSUMER] = ROOT / "_build/bin" / CONSUMER
     weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
     files[weather]=weather_binary()
@@ -57,7 +59,8 @@ def main():
                    "snapshot-report.json","consumer-report.json","layouts-report.json","delivery-report.json",
                    "capture-report.json","audit-report.json","gate-report.json","earthquakes-report.json",
                    "segmented-report.json", "batch-report.json", "approved-consumer-report.json",
-                   "bounded-report.json", "layout-benchmark.json","acceptance.json"):
+                   "bounded-report.json", "bounded-selection-report.json",
+                   "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():
             value=json.loads((ROOT/"_build/acceptance"/report).read_text())
@@ -79,15 +82,16 @@ def main():
         approved_file = earthquakes / "approved.sha256"
         approved_file.write_text(approved["approved_selection_sha256"] + "\n", encoding="ascii")
         files["examples/earthquakes/approved.sha256"] = approved_file
-        bounded = temp / "bounded"
-        comcat_case(bounded)
-        results = json.loads((ROOT/"_build/acceptance/bounded-report.json").read_bytes())["approval"]
-        for limit in (3, 4):
-            selected = bounded / f"approved-{limit}.sha256"
-            selected.write_text(results[f"cap_{limit}"]["selection_sha256"] + "\n", encoding="ascii")
-        for path in bounded.rglob("*"):
-            if path.is_file():
-                files["examples/" + path.relative_to(temp).as_posix()] = path
+        for name, training_weeks, section in (("bounded", 1, "approval"), ("bounded-selection", 2, "selections")):
+            bounded = temp / name
+            comcat_case(bounded, training_weeks=training_weeks)
+            results = json.loads((ROOT / "_build/acceptance" / f"{name}-report.json").read_bytes())[section]
+            for limit in (3, 4):
+                selected = bounded / f"approved-{limit}.sha256"
+                selected.write_text(results[f"cap_{limit}"]["selection_sha256"] + "\n", encoding="ascii")
+            for path in bounded.rglob("*"):
+                if path.is_file():
+                    files["examples/" + path.relative_to(temp).as_posix()] = path
         regression=temp/"regression"
         audit_cases(regression)
         files["examples/regression/batches.json"]=regression/"batches.json"

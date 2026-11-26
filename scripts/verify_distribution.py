@@ -145,14 +145,7 @@ def verify_approved_replay(root, exe):
             "receipt_sha256": trusted, "result_sha256": actual}
 
 
-def verify_bounded_replay(root):
-    started = time.perf_counter()
-    args = ["cmd", "/d", "/c", "replay-bounded.cmd"] if os.name == "nt" else ["sh", "replay-bounded.sh"]
-    replay = subprocess.run([*args, "bounded replay"], cwd=root, timeout=300,
-                            encoding="utf-8", capture_output=True)
-    assert replay.returncode == 0, (replay.stdout, replay.stderr)
-    out = root / "bounded replay"
-    expected = read_json(root / "verification/bounded-report.json")["approval"]
+def check_bounded_receipts(out, expected):
     denied, passed = (read_json(out / f"cap-{limit}/batch-receipt.json") for limit in (3, 4))
     assert denied["status"] == "regression" and not denied["ready"]
     assert passed["status"] == "passed" and passed["ready"]
@@ -180,10 +173,59 @@ def verify_bounded_replay(root):
     assert consumer["cross_receipt_cursor_rejected"]
     digest = hashlib.sha256("\n".join(consumer["values"]).encode()).hexdigest()
     assert digest == expected["sqlite_payload_sha256"]
-    return {"ready": True, "seconds": time.perf_counter() - started, "snapshot_rows": 1516,
+    return {"ready": True, "snapshot_rows": 1516,
             "cap_3_scanned": 673, "cap_4_scanned": 646, "budget": 650, "matched": 593,
             "receipts": {"rejected": denied, "approved": passed},
             "cross_receipt_cursor_rejected": True, "result_sha256": digest}
+
+
+def verify_bounded_replay(root):
+    started = time.perf_counter()
+    args = ["cmd", "/d", "/c", "replay-bounded.cmd"] if os.name == "nt" else ["sh", "replay-bounded.sh"]
+    replay = subprocess.run([*args, "bounded replay"], cwd=root, timeout=300,
+                            encoding="utf-8", capture_output=True)
+    assert replay.returncode == 0, (replay.stdout, replay.stderr)
+    out = root / "bounded replay"
+    expected = read_json(root / "verification/bounded-report.json")["approval"]
+    return {**check_bounded_receipts(out, expected), "seconds": time.perf_counter() - started}
+
+
+def verify_bounded_selection_replay(root):
+    started = time.perf_counter()
+    args = (["cmd", "/d", "/c", "replay-bounded-selection.cmd"] if os.name == "nt"
+            else ["sh", "replay-bounded-selection.sh"])
+    replay = subprocess.run([*args, "bounded selection replay"], cwd=root, timeout=300,
+                            encoding="utf-8", capture_output=True)
+    assert replay.returncode == 0, (replay.stdout, replay.stderr)
+    out = root / "bounded selection replay"
+    expected = read_json(root / "verification/bounded-selection-report.json")
+    prior = read_json(out / "legacy/comparison.json")
+    assert prior["status"] == "no_feasible_candidate"
+    assert [item["queries"][0]["scanned"] for item in prior["layouts"]] == [1021, 1011]
+    for cap, cost in ((3, [634, 624]), (4, [623, 613])):
+        directory = out / f"selection-{cap}"
+        picked = read_json(directory / "comparison.json")
+        assert picked["status"] == "selected" and picked["scan_mode"] == "bounded"
+        assert [item["queries"][0]["scanned"] for item in picked["layouts"]] == cost
+        assert hashlib.sha256((directory / "selection.json").read_bytes()).hexdigest() == (
+            expected["selections"][f"cap_{cap}"]["selection_sha256"])
+    assert (out / "interruption.stdout").read_text(encoding="utf-8").strip() == "paused selected-workload"
+    assert "selected workload is not ready for delivery" in (out / "incomplete.stdout").read_text(encoding="utf-8")
+    strict = read_json(out / "training-ready.json")
+    assert strict["ready"] and strict["cutover_ready"] and strict["rows"] == 1021
+    training = out / "training-index"
+    assert (training / "selection.json").read_bytes() == (out / "selection-4/selection.json").read_bytes()
+    resumed = read_json(training / "selection-report.json")
+    assert resumed["ready"] and resumed["cutover_ready"] and resumed["schema_version"] == 2
+    assert resumed["job"]["scan_mode"] == "bounded"
+    measured, = resumed["workload"]["queries"]
+    reference = expected["recovery"]["cap_4"]
+    for name in ("target_scanned", "fst_scanned", "matched", "bounded_scan", "ordered_result_sha256"):
+        assert measured[name] == reference[name]
+    return {**check_bounded_receipts(out, expected["late"]),
+            "seconds": time.perf_counter() - started,
+            "legacy_status": prior["status"], "training_rows": 1021, "training_scanned": measured["target_scanned"],
+            "interrupted_and_resumed": True, "incomplete_delivery_rejected": True}
 
 
 def verify_archive(path, parent):
@@ -208,6 +250,9 @@ def verify_archive(path, parent):
         segmented_replay = verify_segmented_replay(root)
         approved_replay = verify_approved_replay(root, exe)
         bounded_replay = verify_bounded_replay(root)
+        selected_proof = {}
+        if tuple(map(int, version["version"].split("."))) >= (0, 1, 22):
+            selected_proof["bounded_selection_replay"] = verify_bounded_selection_replay(root)
         current = verify_current_cases(root, exe)
         cases = []
         for name, matches in (("telemetry", 18), ("weather", 29)):
@@ -237,7 +282,7 @@ def verify_archive(path, parent):
             cases.append({"case": name, "rows": matches})
     return {"ready": True, "build": version, "cases": cases, "adoption": current, "gate_replay": gate_replay,
             "segmented_replay": segmented_replay, "approved_replay": approved_replay,
-            "bounded_replay": bounded_replay,
+            "bounded_replay": bounded_replay, **selected_proof,
             "archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
