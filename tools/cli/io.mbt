@@ -223,8 +223,10 @@ fn enter_directory(path : String) -> Unit raise {
 ///|
 fn error_message(error : Error) -> String {
   match error {
-    Invalid(message) | @moonlsm.Io(message) | @moonlsm.Corruption(message) =>
-      message
+    Invalid(message)
+    | @moonlsm.Io(message)
+    | @moonlsm.Corruption(message)
+    | @snapshot.InvalidSnapshot(message) => message
     _ => error.to_string()
   }
 }

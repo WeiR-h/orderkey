@@ -210,7 +210,8 @@ def verify_bounded_selection_replay(root):
         assert hashlib.sha256((directory / "selection.json").read_bytes()).hexdigest() == (
             expected["selections"][f"cap_{cap}"]["selection_sha256"])
     assert (out / "interruption.stdout").read_text(encoding="utf-8").strip() == "paused selected-workload"
-    assert "selected workload is not ready for delivery" in (out / "incomplete.stdout").read_text(encoding="utf-8")
+    rejected = read_json(out / "incomplete.stdout")
+    assert rejected == {"ready": False, "error": "selected workload is not ready for delivery"}, rejected
     strict = read_json(out / "training-ready.json")
     assert strict["ready"] and strict["cutover_ready"] and strict["rows"] == 1021
     training = out / "training-index"
