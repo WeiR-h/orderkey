@@ -24,6 +24,13 @@ orderkey query --out telemetry-selected --where examples/telemetry/where.json --
 
 三个状态都代表已完成比较。无效输入或执行错误返回非零退出码。自动建议覆盖给定查询形成的候选集合。
 
+## 双预算选型
+
+用 `compare-layouts --scan-mode bounded` 让原布局和候选共同按扫描行数与区间数比较。
+每条查询需提供 `max_target_scanned` 和 1–16 的 `max_target_windows`。
+报告列出精确的半开位置区间、候选行数及命中数，仍按固定前缀、返回顺序和权重选型。
+通过的 v2 选型记录扫描模式和逐查询预测；部署方可以独立保存选型文件的 SHA-256。
+
 ## 策略与重建
 
 可在两个命令上使用 `--policy FILE`，文件内容示例

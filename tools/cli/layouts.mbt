@@ -284,6 +284,36 @@ fn variable_order(
 }
 
 ///|
+fn layout_prediction(
+  detail : Json,
+  scanned : String,
+  budget : String,
+) -> Json raise {
+  let fields = [
+    ("id", field(detail, "id")),
+    ("scanned", field(detail, scanned)),
+    ("matched", field(detail, "matched")),
+  ]
+  if optional(detail, "bounded_scan") is Some(plan) {
+    fields.push(("max_target_scanned", field(detail, budget)))
+    fields.push(("bounded_scan", plan))
+  }
+  object(fields)
+}
+
+///|
+fn selection_metadata(mode : ScanMode) -> Array[(String, Json)] {
+  if mode is Bounded {
+    [
+      ("schema_version", Json::number(2)),
+      ("scan_mode", Json::string("bounded")),
+    ]
+  } else {
+    [("schema_version", Json::number(1))]
+  }
+}
+
+///|
 fn evaluate_layout(
   input : LayoutInput,
   target : @orderkey.IndexContract,
@@ -360,34 +390,33 @@ fn evaluate_layout(
       ("scanned", Json::number(scanned.to_double())),
       ("matched", Json::number(query.matched.to_double())),
     ]
-    predictions.push(object(prediction))
-    results.push(
-      object(
-        prediction +
-        [
-          ("plan", plan_json(plan)),
-          (
-            "residual_filtered",
-            if scanned >= query.matched {
-              Json::number((scanned - query.matched).to_double())
-            } else {
-              Json::null()
-            },
+    let detail = object(
+      prediction +
+      [
+        ("plan", plan_json(plan)),
+        (
+          "residual_filtered",
+          if scanned >= query.matched {
+            Json::number((scanned - query.matched).to_double())
+          } else {
+            Json::null()
+          },
+        ),
+        ("budget", Json::number(query.budget.to_double())),
+        (
+          "over_budget_by",
+          Json::number(
+            (if scanned > query.budget { scanned - query.budget } else { 0 }).to_double(),
           ),
-          ("budget", Json::number(query.budget.to_double())),
-          (
-            "over_budget_by",
-            Json::number(
-              (if scanned > query.budget { scanned - query.budget } else { 0 }).to_double(),
-            ),
-          ),
-          ("weight", Json::number(query.weight.to_double())),
-          ("order_changed", Json::boolean(changed)),
-          ("failures", Json::array(failures)),
-        ] +
-        scan_details,
-      ),
+        ),
+        ("weight", Json::number(query.weight.to_double())),
+        ("order_changed", Json::boolean(changed)),
+        ("failures", Json::array(failures)),
+      ] +
+      scan_details,
     )
+    results.push(detail)
+    predictions.push(layout_prediction(detail, "scanned", "budget"))
   }
   let detail = object([
     ("baseline", Json::boolean(baseline)),
@@ -422,8 +451,9 @@ fn evaluate_layout(
 fn evaluate_candidates(
   input : LayoutInput,
   candidates : Array[@orderkey.IndexContract],
+  mode : ScanMode,
 ) -> (Array[Json], (@orderkey.IndexContract, LayoutScore)?) raise {
-  let baseline = evaluate_layout(input, input.source, true)
+  let baseline = evaluate_layout(input, input.source, true, mode~)
   let reports = [baseline.detail]
   let mut best = if baseline.eligible {
     Some((input.source, baseline))
@@ -431,7 +461,7 @@ fn evaluate_candidates(
     None
   }
   for candidate in candidates {
-    let score = evaluate_layout(input, candidate, false)
+    let score = evaluate_layout(input, candidate, false, mode~)
     reports.push(score.detail)
     if !score.eligible {
       continue
@@ -504,6 +534,7 @@ async fn compare_layouts(args : Array[String]) -> Unit {
     args,
     [
       "--input", "--source-contract", "--queries", "--candidate", "--policy", "--out",
+      "--scan-mode",
     ],
     ["--auto"],
   )
@@ -512,7 +543,17 @@ async fn compare_layouts(args : Array[String]) -> Unit {
     (paths.is_empty() && !options.switches.contains("--auto")) {
     invalid("supply up to eight --candidate contracts and/or --auto")
   }
+  let mode = match options.paths.get("--scan-mode") {
+    None | Some(["single"]) => Single
+    Some(["bounded"]) => Bounded
+    _ => raise Invalid("compare-layouts scan mode must be single or bounded")
+  }
   let input = layout_input(options)
+  if mode is Bounded {
+    for query in input.queries {
+      mode.require_window_budget(query.window_budget)
+    }
+  }
   let candidates = []
   let keys = [layout_key(input.source)]
   for path in paths {
@@ -527,7 +568,7 @@ async fn compare_layouts(args : Array[String]) -> Unit {
   if options.switches.contains("--auto") {
     add_automatic_layouts(input, candidates, keys)
   }
-  let (reports, best) = evaluate_candidates(input, candidates)
+  let (reports, best) = evaluate_candidates(input, candidates, mode)
   if layout_digests(options) != input.digests {
     invalid("comparison inputs changed")
   }
@@ -539,21 +580,27 @@ async fn compare_layouts(args : Array[String]) -> Unit {
       ("keep_source", Json::null())
     Some((target, _)) => ("selected", Json::string(hash(target.to_bytes())))
   }
-  let report = object([
-    ("schema_version", Json::number(1)),
-    ("version", Json::string(tool_version)),
-    ("status", Json::string(status)),
-    ("digests", input.digests),
-    ("rows", Json::number(input.rows.length().to_double())),
-    (
-      "scan_metric",
-      Json::string(
-        "records in the planned byte range before residual filtering",
+  let report = object(
+    selection_metadata(mode) +
+    [
+      ("version", Json::string(tool_version)),
+      ("status", Json::string(status)),
+      ("digests", input.digests),
+      ("rows", Json::number(input.rows.length().to_double())),
+      (
+        "scan_metric",
+        Json::string(
+          if mode is Bounded {
+            "records in the planned byte ranges before residual filtering"
+          } else {
+            "records in the planned byte range before residual filtering"
+          },
+        ),
       ),
-    ),
-    ("selected_contract_sha256", selected),
-    ("layouts", Json::array(reports)),
-  ])
+      ("selected_contract_sha256", selected),
+      ("layouts", Json::array(reports)),
+    ],
+  )
   atomic_json(out + "/comparison.json", report)
   if status == "selected" {
     guard best is Some((target, score)) else {
@@ -562,12 +609,14 @@ async fn compare_layouts(args : Array[String]) -> Unit {
     put(out + "/target.contract", target.to_bytes())
     atomic_json(
       out + "/selection.json",
-      object([
-        ("schema_version", Json::number(1)),
-        ("digests", input.digests),
-        ("target_contract_sha256", selected),
-        ("predictions", score.predictions),
-      ]),
+      object(
+        selection_metadata(mode) +
+        [
+          ("digests", input.digests),
+          ("target_contract_sha256", selected),
+          ("predictions", score.predictions),
+        ],
+      ),
     )
   }
   println(report.stringify())

@@ -26,7 +26,7 @@ def write_export(directory, rows, source, target):
             }) + "\n")
 
 
-def comcat_case(base):
+def comcat_case(base, *, training_weeks=1):
     base.mkdir()
     rows = frozen_events()
     event_type, network, time, event_id = [
@@ -41,7 +41,7 @@ def comcat_case(base):
     target = {**source, "generation": "2", "fields": [event_type, network, time, event_id]}
     for name in ("training", "late"):
         data = [((net, kind, ms, id_), id_) for kind, net, ms, id_ in rows
-                if name == "late" or LOW <= ms < HIGH]
+                if name == "late" or LOW <= ms < LOW + training_weeks * (HIGH - LOW)]
         write_export(base / name, data, source, target)
     query = {"id": "global-week", "eq": {"event_type": {"bytes_hex": b"earthquake".hex()}},
              "range": {"field": "time", "lower": {"int64": str(LOW)},
