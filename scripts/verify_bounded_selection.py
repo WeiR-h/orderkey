@@ -3,12 +3,15 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import tempfile
 
-from verify_batch import sha
-from verify_bounded import comcat_case, exhaustive_minimum
+from verify_approved_consumer import copy_candidate
+from verify_batch import approved_args, gate_batch, sha
+from verify_bounded import comcat_case, exhaustive_minimum, read_global_week, sqlite_oracle
 from verify_cli import ROOT, run
+from verify_delivery import interrupt_selected_workload
 from verify_earthquakes import HIGH, LOW
 from verify_layouts import read_json, write_json
 
@@ -103,6 +106,140 @@ def verify_selection(exe, base, case, rows):
             "legacy_scanned": [1021, 1011], "selections": selections, "sqlite_costs": costs}
 
 
+def check_training_delivery(exe, path, selection, expected):
+    digest = sha(selection / "selection.json")
+    assert json.loads(run(exe, "verify-delivery", [
+        "--out", str(path), "--selection-sha256", digest,
+    ]))["rows"] == 1021
+    receipt = read_json(path / "selection-report.json")
+    assert receipt["ready"] and receipt["cutover_ready"] and receipt["schema_version"] == 2
+    assert receipt["job"]["scan_mode"] == "bounded" and receipt["job"]["selection_sha256"] == digest
+    assert (path / "selection.json").read_bytes() == (selection / "selection.json").read_bytes()
+    assert receipt["predictions"] == read_json(selection / "selection.json")["predictions"]
+    measured, = receipt["workload"]["queries"]
+    assert measured["target_scanned"] == measured["fst_scanned"] == expected and measured["matched"] == 593
+    assert measured["pagination_match"] and measured["results_match"]
+    assert measured["bounded_scan"] == receipt["predictions"][0]["bounded_scan"]
+    return measured
+
+
+def verify_recovery(exe, base, training):
+    cap3_selection = base / "selection-3"
+    cap4_selection = base / "selection-4"
+    cap3 = base / "train-cap-3"
+    resumed = base / "train-cap-4"
+    clean = base / "train-cap-4-clean"
+    arguments = [*workload_args(training, 4), "--selection", str(cap4_selection)]
+    build = [*arguments, "--out", str(resumed)]
+    interrupt_selected_workload(exe, build)
+    assert read_json(resumed / "report.json")["ready"]
+    receipt = resumed / "selection-report.json"
+    assert not read_json(receipt)["ready"]
+    old = receipt.read_bytes()
+    run(exe, "verify-delivery", ["--out", str(resumed)], success=False)
+
+    # Each variant differs in just one approved input. No rejected resume may update the receipt.
+    plan = cap4_selection / "selection.json"
+    workload = training / "workload-4.json"
+    target = cap4_selection / "target.contract"
+    faulty = read_json(plan)
+    faulty["scan_mode"] = "single"
+    prediction = read_json(plan)
+    prediction["predictions"][0]["scanned"] += 1
+    changed_budget = read_json(workload)
+    changed_budget["queries"][0]["max_target_windows"] = 3
+    for path, data in ((plan, faulty), (plan, prediction), (workload, changed_budget), (target, b"{}")):
+        before = path.read_bytes()
+        try:
+            if isinstance(data, bytes):
+                path.write_bytes(data)
+            else:
+                write_json(path, data)
+            run(exe, "build-selected", [*build, "--resume"], success=False)
+            assert receipt.read_bytes() == old
+        finally:
+            path.write_bytes(before)
+    run(exe, "build-selected", [*workload_args(training, 3), "--selection", str(cap3_selection),
+                                "--out", str(resumed), "--resume"], success=False)
+    assert receipt.read_bytes() == old
+    run(exe, "build-selected", [*build, "--resume"])
+    run(exe, "build-selected", [*arguments, "--out", str(clean)])
+    run(exe, "build-selected", [*workload_args(training, 3), "--selection", str(cap3_selection),
+                                "--out", str(cap3)])
+    accepted = check_training_delivery(exe, resumed, cap4_selection, 613)
+    fresh = check_training_delivery(exe, clean, cap4_selection, 613)
+    three = check_training_delivery(exe, cap3, cap3_selection, 624)
+    assert accepted["ordered_result_sha256"] == fresh["ordered_result_sha256"] == three["ordered_result_sha256"]
+    assert (resumed / "records.jsonl").read_bytes() == (clean / "records.jsonl").read_bytes()
+
+    portable = base / "portable-training"
+    copy_candidate(resumed, portable)
+    for name in ("selection.json", "selection-job.json", "selection-report.json"):
+        shutil.copyfile(resumed / name, portable / name)
+    check_training_delivery(exe, portable, cap4_selection, 613)
+    copied = portable / "selection.json"
+    copied.write_bytes(copied.read_bytes() + b"\n")
+    run(exe, "verify-delivery", ["--out", str(portable)], success=False)
+    shutil.copyfile(resumed / "selection.json", copied)
+    measured_report = portable / "selection-report.json"
+    corrupted = read_json(measured_report)
+    corrupted["workload"]["queries"][0]["bounded_scan"]["rank_windows"] = [[0, 1]]
+    write_json(measured_report, corrupted)
+    run(exe, "verify-delivery", ["--out", str(portable)], success=False)
+    return {"interrupted_and_resumed": True, "incomplete_delivery_rejected": True,
+            "recovered_matches_clean": True, "changed_resumes_rejected": 5,
+            "portable_delivery_verified": True, "tampered_delivery_rejected": True,
+            "cap_3": three, "cap_4": accepted}
+
+
+def verify_late(exe, base, case, events):
+    late_index = base / "late-index"
+    selection = base / "selection-4"
+    run(exe, "build", ["--input", str(case / "late/input.jsonl"), "--source-contract",
+                       str(case / "late/source.json"), "--target-contract",
+                       str(selection / "target.contract"), "--out", str(late_index)])
+    audits = {}
+    for cap, expected, exit_code in ((3, [688, 673], 1), (4, [661, 646], 0)):
+        chosen, batches = base / f"selection-{cap}", case / f"batches-{cap}.json"
+        audit_dir = base / f"audit-{cap}"
+        run(exe, "audit-layout", ["--selection", str(chosen), "--batches", str(batches),
+                                 "--locked", "--scan-mode", "bounded", "--out", str(audit_dir)],
+            success=(exit_code == 0))
+        batch, = read_json(audit_dir / "audit-report.json")["batches"]
+        assert [batch[name]["queries"][0]["scanned"] for name in ("source", "target")] == expected
+        receipt = gate_batch(exe, chosen, batches, "late", late_index, "bounded",
+                             base / f"cap-{cap}", exit_code)
+        query, = receipt["queries"]
+        assert query["target_scanned"] == query["fst_scanned"] == query["predicted_scanned"] == expected[1]
+        assert query["max_target_windows"] == cap and query["max_target_scanned"] == 650
+        assert query["matched"] == 593 and query["within_budget"] == (exit_code == 0)
+        assert query["results_match"] and query["pagination_match"]
+        training_ranks = read_json(chosen / "selection.json")["predictions"][0]["bounded_scan"]["rank_windows"]
+        assert query["rank_windows"] != training_ranks
+        audits[f"cap_{cap}"] = receipt
+    assert audits["cap_3"]["manifest_sha256"] == audits["cap_4"]["manifest_sha256"]
+    gate_batch(exe, base / "selection-3", case / "batches-4.json", "late", late_index,
+               "bounded", base / "changed-late-budget", 2)
+    gate_batch(exe, selection, case / "batches-4.json", "late", late_index, "single", base / "wrong-scan-mode", 2)
+    receipt = base / "cap-4/batch-receipt.json"
+    where = case / "where.json"
+    expected, _ = sqlite_oracle(events)
+    fields = read_json(case / "late/target.json")["fields"]
+    cursor, sizes, payload_hash, result_hash = read_global_week(
+        exe, approved_args(late_index, receipt, where), expected, fields)
+    for cap in ("cap_3", "cap_4"):
+        assert audits[cap]["queries"][0]["ordered_result_sha256"] == result_hash
+    gate_batch(exe, selection, case / "batches-4.json", "late", late_index,
+               "bounded", base / "other-approval", 0)
+    other = base / "other-approval/batch-receipt.json"
+    assert sha(other) != sha(receipt)
+    other_args = approved_args(late_index, other, where)
+    assert len(json.loads(run(exe, "query-approved", other_args))["rows"]) == 31
+    run(exe, "query-approved", [*other_args, "--cursor", cursor], success=False)
+    return {**audits, "approved_page_sizes": sizes, "sqlite_payload_sha256": payload_hash,
+            "cross_receipt_cursor_rejected": True}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
@@ -114,8 +251,10 @@ def main():
         case = base / "comcat"
         rows = comcat_case(case, training_weeks=2)
         proof = verify_selection(exe, base, case, rows)
+        proof["recovery"] = verify_recovery(exe, base, case / "training")
+        proof["late"] = verify_late(exe, base, case, rows)
     write_json(args.report, proof)
-    print("Dual-budget advisor selected 624 and 613 candidates where the single scan rejected the layout")
+    print("Bounded selection recovered; 673/650 rejected, 646/650 approved; 593 ordered results")
 
 
 if __name__ == "__main__":

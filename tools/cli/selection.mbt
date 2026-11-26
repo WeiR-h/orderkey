@@ -1,11 +1,23 @@
 ///|
 struct SelectedLayout {
   options : LayoutOptions
+  mode : ScanMode
+  raw : Bytes
   target_path : String
   identity : Json
   digests : Json
   predictions : Json
   target_digest : String
+}
+
+///|
+fn selection_mode(selection : Json) -> ScanMode raise {
+  match field(selection, "schema_version") {
+    Number(1.0, ..) => Single
+    Number(2.0, ..) if field(selection, "scan_mode") == Json::string("bounded") =>
+      Bounded
+    _ => raise Invalid("unsupported selection version or scan mode")
+  }
 }
 
 ///|
@@ -21,19 +33,21 @@ async fn prepare_selection(args : Array[String]) -> SelectedLayout {
   let dir = @fs.realpath(options.path("--selection"))
   let raw = read(dir + "/selection.json", maximum=1048576)
   let selection = @json.parse(@utf8.decode(raw), reject_duplicate_keys=true)
-  only_fields(selection, [
-    "schema_version", "digests", "target_contract_sha256", "predictions",
-  ])
-  if field(selection, "schema_version") != Json::number(1) {
-    invalid("unsupported selection version")
-  }
+  let mode = selection_mode(selection)
+  let metadata = selection_metadata(mode)
+  only_fields(
+    selection,
+    metadata.map(pair => pair.0) +
+    ["digests", "target_contract_sha256", "predictions"],
+  )
   let input = layout_input(options)
   for query in input.queries {
-    if query.window_budget is Some(_) {
+    if mode is Single && query.window_budget is Some(_) {
       invalid(
         "use build and gate-batch --scan-mode bounded for a window budget",
       )
     }
+    mode.require_window_budget(query.window_budget)
   }
   if field(selection, "digests") != input.digests {
     invalid("selection inputs changed")
@@ -47,18 +61,22 @@ async fn prepare_selection(args : Array[String]) -> SelectedLayout {
   if layout_key(input.source) == layout_key(target) {
     invalid("selection must change the layout")
   }
-  let score = evaluate_layout(input, target, false)
+  let score = evaluate_layout(input, target, false, mode~)
   if !score.eligible || score.predictions != field(selection, "predictions") {
     invalid("selected layout no longer matches its predictions or policy")
   }
-  let identity = object([
-    ("schema_version", Json::number(1)),
-    ("selection_sha256", Json::string(hash(raw))),
-    ("digests", input.digests),
-    ("target_contract_sha256", Json::string(target_digest)),
-  ])
+  let identity = object(
+    metadata +
+    [
+      ("selection_sha256", Json::string(hash(raw))),
+      ("digests", input.digests),
+      ("target_contract_sha256", Json::string(target_digest)),
+    ],
+  )
   {
     options,
+    mode,
+    raw,
     target_path,
     identity,
     digests: input.digests,
@@ -91,19 +109,28 @@ async fn build_selected(
   selection : SelectedLayout,
 ) -> Unit {
   let binding = dir + "/selection-job.json"
+  let selection_file = dir + "/selection.json"
+  let bounded = selection.mode is Bounded
   if selection.options.switches.contains("--resume") {
-    if !@fs.exists(binding) || json_file(binding) != selection.identity {
+    if !@fs.exists(binding) ||
+      json_file(binding) != selection.identity ||
+      (bounded && read(selection_file, maximum=1048576) != selection.raw) {
       invalid("selected job identity differs")
     }
   } else {
+    if bounded {
+      put(selection_file + ".tmp", selection.raw)
+      @fs.rename(selection_file + ".tmp", selection_file)
+    }
     atomic_json(binding, selection.identity)
   }
+  let version = field(selection.identity, "schema_version")
   let receipt = dir + "/selection-report.json"
   let run_id = Json::string(@async.now().to_string())
   atomic_json(
     receipt,
     object([
-      ("schema_version", Json::number(1)),
+      ("schema_version", version),
       ("ready", Json::boolean(false)),
       ("job", selection.identity),
       ("run_id", run_id),
@@ -136,7 +163,13 @@ async fn build_selected(
     resume_stages(dir, input, args)
     finish(dir, input)
     inject(args, "selected-workload")
-    let measured = workload(args, dir, replay_source=false)
+    let measured = workload(
+      args,
+      dir,
+      replay_source=false,
+      mode=selection.mode,
+      evidence=bounded,
+    )
     if field(measured, "cutover_ready") != Json::boolean(true) {
       invalid("selected workload exceeded its scan budget")
     }
@@ -145,19 +178,18 @@ async fn build_selected(
     }
     let actual = Json::array(
       results.map(result => {
-        object([
-          ("id", field(result, "id")),
-          ("scanned", field(result, "target_scanned")),
-          ("matched", field(result, "matched")),
-        ])
+        layout_prediction(result, "target_scanned", "max_target_scanned")
       }),
     )
     if actual != selection.predictions {
       invalid("predicted and measured query results differ")
     }
     check_selection_identity(selection)
+    if bounded && read(selection_file, maximum=1048576) != selection.raw {
+      invalid("delivered selection changed during rebuild")
+    }
     let report = object([
-      ("schema_version", Json::number(1)),
+      ("schema_version", version),
       ("ready", Json::boolean(true)),
       ("cutover_ready", Json::boolean(true)),
       ("job", selection.identity),
@@ -171,7 +203,7 @@ async fn build_selected(
     error => {
       let message = error_message(error)
       let failure = object([
-        ("schema_version", Json::number(1)),
+        ("schema_version", version),
         ("ready", Json::boolean(false)),
         ("cutover_ready", Json::boolean(false)),
         ("job", selection.identity),

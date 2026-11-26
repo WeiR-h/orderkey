@@ -76,8 +76,9 @@ async fn audit_report(
       @utf8.decode(selected_raw),
       reject_duplicate_keys=true,
     )
-    if field(selected, "schema_version") != Json::number(1) {
-      invalid("unsupported selection version")
+    let approved_mode = selection_mode(selected)
+    if approved_mode is Bounded && (!(mode is Bounded) || !locked) {
+      invalid("v2 selection requires a locked bounded audit")
     }
     let target_path = selection_dir + "/target.contract"
     let target = contract(target_path)
@@ -116,7 +117,12 @@ async fn audit_report(
           invalid("batch reuses an earlier frozen export")
         }
         hashes.push(data_hash)
-        let source_score = evaluate_layout(input, input.source, true)
+        let source_score = evaluate_layout(
+          input,
+          input.source,
+          true,
+          mode=approved_mode,
+        )
         for query in input.queries {
           mode.require_window_budget(query.window_budget)
         }

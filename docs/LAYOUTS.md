@@ -47,6 +47,11 @@ orderkey query --out telemetry-selected --where examples/telemetry/where.json --
 
 `build-selected --selection DIR` 重新读取方案、契约、导出、查询和策略，复核摘要、预算与预测值后重建。中断时用相同命令和 `--out`，再加 `--resume`。只有 `selection-report.json` 的 `ready` 和 `cutover_ready` 均为真，且其中的清单摘要与交付文件一致时，该候选通过本次选型验收。原有 `report.json` 用于检查数据库与快照文件。
 
+v2 选型的构建从选型文件取得扫描模式，核对两个引擎的候选行数、区间、顺序与分页。
+交付目录包含原始 `selection.json`，可由 `verify-delivery --selection-sha256` 对照独立保存的摘要。
+冻结的后续批次使用选定的目标契约重建，再运行 `gate-batch --scan-mode bounded`。
+区间由末批键重新计算，通过后凭该批的回执分页。
+
 把上述命令中的 `telemetry` 换成 `weather`，可用 273 条 NOAA 数据重建天气快照。示例查询返回 29 条，现有 `Reader::open` 可以查询重建后的目录。一个页面的游标按索引契约、快照与查询作用域校验。
 
 交付选型结果时，用 `orderkey verify-delivery --out telemetry-selected`

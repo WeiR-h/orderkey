@@ -16,7 +16,11 @@ fn delivery_count(value : Json, name : String) -> Int32 raise {
 }
 
 ///|
-fn check_delivery_queries(report : Json, workload : Json) -> Unit raise {
+fn check_delivery_queries(
+  report : Json,
+  workload : Json,
+  snapshot_rows : Int32?,
+) -> Unit raise {
   guard property(report, "predictions") is Array(predictions) &&
     property(workload, "queries") is Array(results) &&
     predictions.length() == results.length() &&
@@ -46,6 +50,17 @@ fn check_delivery_queries(report : Json, workload : Json) -> Unit raise {
         raise InvalidSnapshot("delivery query did not pass: " + id)
       }
     }
+    if snapshot_rows is Some(rows) {
+      let plan = property(prediction, "bounded_scan")
+      if plan != property(query, "bounded_scan") ||
+        property(prediction, "max_target_scanned") !=
+        property(query, "max_target_scanned") ||
+        delivery_count(plan, "planned_scanned") != scanned ||
+        delivery_count(plan, "matched") != matched {
+        raise InvalidSnapshot("bounded delivery differs from selection: " + id)
+      }
+      receipt_windows(plan, rows, scanned) |> ignore
+    }
   }
 }
 
@@ -58,15 +73,19 @@ pub async fn Reader::open_selected(
 ) -> Reader {
   let receipt_raw = read_file(dir + "/selection-report.json")
   let report = parse(receipt_raw)
-  delivery_version(report)
+  let version = property(report, "schema_version")
+  let bounded = version == Json::number(2)
+  if version != Json::number(1) && !bounded {
+    raise InvalidSnapshot("unsupported delivery metadata version")
+  }
   if property(report, "ready") != Json::boolean(true) ||
     property(report, "cutover_ready") != Json::boolean(true) {
     raise InvalidSnapshot("selected workload is not ready for delivery")
   }
   let job_raw = read_file(dir + "/selection-job.json")
   let job = parse(job_raw)
-  delivery_version(job)
-  if property(report, "job") != job {
+  if property(job, "schema_version") != version ||
+    property(report, "job") != job {
     raise InvalidSnapshot("selection job differs from delivery receipt")
   }
   let selection_sha = string(property(job, "selection_sha256"))
@@ -91,6 +110,24 @@ pub async fn Reader::open_selected(
   let digests = property(job, "digests")
   let files = property(manifest, "files")
   let target = property(job, "target_contract_sha256")
+  let selection_raw = if bounded {
+    let bytes = read_file(dir + "/selection.json", maximum=1048576)
+    let selection = parse(bytes)
+    let mode = Json::string("bounded")
+    if digest(bytes) != selection_sha ||
+      property(selection, "schema_version") != version ||
+      property(selection, "scan_mode") != mode ||
+      property(job, "scan_mode") != mode ||
+      property(workload, "scan_mode") != mode ||
+      property(selection, "digests") != digests ||
+      property(selection, "target_contract_sha256") != target ||
+      property(selection, "predictions") != property(report, "predictions") {
+      raise InvalidSnapshot("bounded delivery differs from its selection")
+    }
+    Some(bytes)
+  } else {
+    None
+  }
   let source = property(digests, "source_contract_sha256")
   let input = property(digests, "input_sha256")
   let fingerprint = digest(
@@ -112,13 +149,25 @@ pub async fn Reader::open_selected(
       "delivery metadata belongs to another artifact or workload",
     )
   }
-  check_delivery_queries(report, workload)
+  check_delivery_queries(
+    report,
+    workload,
+    if bounded {
+      Some(delivery_count(manifest, "rows"))
+    } else {
+      None
+    },
+  )
   let reader = Reader::open(dir)
   if reader.manifest_hash != manifest_hash ||
     read_file(dir + "/selection-report.json") != receipt_raw ||
     read_file(dir + "/selection-job.json") != job_raw ||
     read_file(dir + "/report.json") != verified_raw ||
-    read_file(dir + "/manifest.json") != raw {
+    read_file(dir + "/manifest.json") != raw ||
+    (
+      selection_raw is Some(bytes) &&
+      read_file(dir + "/selection.json", maximum=1048576) != bytes
+    ) {
     raise InvalidSnapshot("delivery changed while opening")
   }
   reader

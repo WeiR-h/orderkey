@@ -13,13 +13,7 @@ from verify_cli import ROOT, dataset, run, write_case
 from verify_layouts import build_args, case_args, read_json, workload, write_json
 
 
-def verify(exe, producer, directory):
-    case = directory / "weather"
-    write_case(case, dataset(True), True)
-    write_json(case / "layout-workload.json", workload(True))
-    selection, candidate = case / "plan", case / "candidate"
-    run(producer, "compare-layouts", [*case_args(case), "--auto", "--out", str(selection)])
-    args = build_args(case, selection, candidate)
+def interrupt_selected_workload(producer, args):
     with subprocess.Popen(
         [str(producer), "build-selected", *args, "--pause-after", "selected-workload"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
@@ -31,6 +25,16 @@ def verify(exe, producer, directory):
             finally:
                 proc.kill()
         proc.communicate(timeout=10)
+
+
+def verify(exe, producer, directory):
+    case = directory / "weather"
+    write_case(case, dataset(True), True)
+    write_json(case / "layout-workload.json", workload(True))
+    selection, candidate = case / "plan", case / "candidate"
+    run(producer, "compare-layouts", [*case_args(case), "--auto", "--out", str(selection)])
+    args = build_args(case, selection, candidate)
+    interrupt_selected_workload(producer, args)
     assert read_json(candidate / "report.json")["ready"]
     assert not read_json(candidate / "selection-report.json")["ready"]
     run(exe, "verify-delivery", ["--out", str(candidate)], success=False)

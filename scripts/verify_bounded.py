@@ -130,10 +130,32 @@ def verify_high_cardinality(exe, base):
             "moonlsm_scanned": measured["target_scanned"], "moonfst_scanned": measured["fst_scanned"]}
 
 
+def read_global_week(exe, args, expected, fields):
+    first = json.loads(run(exe, "query-approved", args))
+    page = first
+    rows, sizes, scanned = [], [], 0
+    for _ in range(21):
+        sizes.append(len(page["rows"]))
+        rows.extend(page["rows"])
+        scanned += page["scanned"]
+        if not page["cursor"]:
+            break
+        page = json.loads(run(exe, "query-approved", args + ["--cursor", page["cursor"]]))
+    assert sizes == [31] * 19 + [4] and scanned == 646
+    assert rows == [{"key_hex": key(row, fields).hex(), "value_hex": row[-1].hex()} for row in expected]
+    payload_sha = hashlib.sha256("\n".join(row["value_hex"] for row in rows).encode()).hexdigest()
+    result_sha = hashlib.sha256()
+    for row in rows:
+        for name in ("key_hex", "value_hex"):
+            data = bytes.fromhex(row[name])
+            result_sha.update(len(data).to_bytes(4, "big"))
+            result_sha.update(data)
+    return first["cursor"], sizes, payload_sha, result_sha.hexdigest()
+
+
 def verify_receipts(exe, base, case, candidate, expected, plans):
     selections = {}
     receipts = {}
-    rows = []
     for limit, exit_code in ((3, 1), (4, 0)):
         train = case / "training"
         selection = base / f"selection-{limit}"
@@ -164,27 +186,9 @@ def verify_receipts(exe, base, case, candidate, expected, plans):
     where = case / "where.json"
     receipt = base / "gate-4/batch-receipt.json"
     args = approved_args(candidate, receipt, where)
-    first = json.loads(run(exe, "query-approved", args))
-    page = first
-    sizes, scanned = [], 0
-    for _ in range(21):
-        sizes.append(len(page["rows"]))
-        rows.extend(page["rows"])
-        scanned += page["scanned"]
-        if not page["cursor"]:
-            break
-        page = json.loads(run(exe, "query-approved", args + ["--cursor", page["cursor"]]))
-    assert sizes == [31] * 19 + [4] and scanned == 646
     fields = read_json(case / "late/target.json")["fields"]
-    assert rows == [{"key_hex": key(row, fields).hex(), "value_hex": row[-1].hex()} for row in expected]
-    payload_sha = hashlib.sha256("\n".join(row["value_hex"] for row in rows).encode()).hexdigest()
-    result_sha = hashlib.sha256()
-    for row in rows:
-        for name in ("key_hex", "value_hex"):
-            data = bytes.fromhex(row[name])
-            result_sha.update(len(data).to_bytes(4, "big"))
-            result_sha.update(data)
-    assert result_sha.hexdigest() == receipts[4]["queries"][0]["ordered_result_sha256"]
+    cursor, sizes, payload_sha, result_sha = read_global_week(exe, args, expected, fields)
+    assert result_sha == receipts[4]["queries"][0]["ordered_result_sha256"]
 
     gate_batch(exe, selections[4], case / "batches-4.json", "late",
                candidate, "bounded", base / "other-approved", 0)
@@ -192,7 +196,7 @@ def verify_receipts(exe, base, case, candidate, expected, plans):
     assert sha(receipt) != sha(other)
     other_args = approved_args(candidate, other, where)
     assert len(json.loads(run(exe, "query-approved", other_args))["rows"]) == 31
-    run(exe, "query-approved", other_args + ["--cursor", first["cursor"]], success=False)
+    run(exe, "query-approved", other_args + ["--cursor", cursor], success=False)
     run(exe, "query-approved", approved_args(candidate, base / "gate-3/batch-receipt.json", where),
         success=False)
 

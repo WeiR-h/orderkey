@@ -99,11 +99,20 @@ async fn workload(
   dir : String,
   replay_source~ : Bool = true,
   mode~ : ScanMode = Single,
+  evidence~ : Bool = false,
 ) -> Json {
   let input = persisted_input(dir)
   let path = option(args, "--queries")
   let raw = read(path, maximum=1048576)
-  let measured = measure_workload(dir, input, raw, dir, replay_source~, mode~)
+  let measured = measure_workload(
+    dir,
+    input,
+    raw,
+    dir,
+    replay_source~,
+    mode~,
+    evidence~,
+  )
   if persisted_input(dir).fingerprint != input.fingerprint ||
     read(path, maximum=1048576) != raw {
     invalid("input or workload changed during verification")
