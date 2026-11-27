@@ -229,6 +229,49 @@ def verify_bounded_selection_replay(root):
             "interrupted_and_resumed": True, "incomplete_delivery_rejected": True}
 
 
+def verify_batch_selection_replay(root):
+    started = time.perf_counter()
+    command = (["cmd", "/d", "/c", "replay-batch-selection.cmd"] if os.name == "nt"
+               else ["sh", "replay-batch-selection.sh"])
+    replay = subprocess.run([*command, "batch selection replay"], cwd=root, timeout=300,
+                            encoding="utf-8", capture_output=True)
+    assert replay.returncode == 0, (replay.stdout, replay.stderr)
+    out = root / "batch selection replay"
+    expected = read_json(root / "verification/batch-selection-report.json")
+    first = read_json(out / "first-week/comparison.json")
+    assert first["status"] == expected["single_batch_status"] == "keep_source"
+    assert (out / "interruption.stdout").read_text(encoding="utf-8").strip() == "paused selected-workload"
+    assert read_json(out / "incomplete.stdout") == {
+        "ready": False, "error": "selected workload is not ready for delivery"}
+    for cap in (3, 4):
+        selected = out / f"selection-{cap}"
+        report = read_json(selected / "comparison-batches.json")
+        assert report == expected["comparisons"][f"cap_{cap}"]
+        assert {b["rows"] for b in report["batches"]} == {599, 1021}
+        for artifact in ("selection", "assessment"):
+            digest = hashlib.sha256((selected / f"{artifact}.json").read_bytes()).hexdigest()
+            assert digest == expected["approvals"][f"cap_{cap}"][f"{artifact}_sha256"]
+        receipt = read_json(out / f"cap-{cap}/batch-receipt.json")
+        ref = expected["holdout"][f"cap_{cap}"]
+        assert receipt["assessment_sha256"] == ref["assessment_sha256"]
+        assert receipt["holdout_keys_sha256"] == ref["holdout_keys_sha256"]
+        assessment = read_json(selected / "assessment.json")
+        assert all(batch["keys_sha256"] != receipt["holdout_keys_sha256"] for batch in assessment["batches"])
+    strict = read_json(out / "anchor-ready.json")
+    assert strict["ready"] and strict["cutover_ready"] and strict["rows"] == 1021
+    anchor = out / "anchor-index"
+    assert (anchor / "assessment.json").read_bytes() == (out / "selection-4/assessment.json").read_bytes()
+    resumed = read_json(anchor / "selection-report.json")
+    assert resumed["ready"] and resumed["job"]["assessment_sha256"] == expected["recovery"]["assessment_sha256"]
+    measured, = resumed["workload"]["queries"]
+    for name in ("target_scanned", "fst_scanned", "matched", "bounded_scan", "ordered_result_sha256"):
+        assert measured[name] == expected["recovery"]["measured"][name]
+    return {**check_bounded_receipts(out, expected["holdout"]),
+            "seconds": time.perf_counter() - started, "first_week_status": first["status"],
+            "assessed_rows": [599, 1021], "anchor_scanned": measured["target_scanned"],
+            "interrupted_and_resumed": True, "incomplete_delivery_rejected": True}
+
+
 def verify_archive(path, parent):
     with tempfile.TemporaryDirectory(prefix="distribution-", dir=parent) as temp:
         root = Path(temp)
@@ -254,6 +297,8 @@ def verify_archive(path, parent):
         selected_proof = {}
         if tuple(map(int, version["version"].split("."))) >= (0, 1, 22):
             selected_proof["bounded_selection_replay"] = verify_bounded_selection_replay(root)
+        if tuple(map(int, version["version"].split("."))) >= (0, 2, 0):
+            selected_proof["batch_selection_replay"] = verify_batch_selection_replay(root)
         current = verify_current_cases(root, exe)
         cases = []
         for name, matches in (("telemetry", 18), ("weather", 29)):

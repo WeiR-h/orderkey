@@ -16,6 +16,12 @@ from verify_cli import ROOT, contract, write_case
 from verify_layouts import assert_measured, build_args, case_args, read_json, write_json
 
 
+CANDIDATE_ORDERS = [
+    (1, 0, 2, 3), (1, 2, 0, 3), (1, 2, 3, 0), (2, 0, 1, 3),
+    (2, 1, 0, 3), (3, 0, 1, 2), (0, 2, 1, 3), (0, 3, 1, 2),
+]
+
+
 def directory_bytes(directory):
     total = 0
     for root, _, files in os.walk(directory):
@@ -92,13 +98,9 @@ def benchmark(exe, base):
     case = base / "input"
     args = write_case(case, fixture_rows())
     fields = contract(1)["fields"]
-    permutations_to_try = [
-        (1, 0, 2, 3), (1, 2, 0, 3), (1, 2, 3, 0), (2, 0, 1, 3),
-        (2, 1, 0, 3), (3, 0, 1, 2), (0, 2, 1, 3), (0, 3, 1, 2),
-    ]
-    assert set(permutations_to_try).issubset(permutations(range(4)))
+    assert set(CANDIDATE_ORDERS).issubset(permutations(range(4)))
     paths = []
-    for ordinal, order in enumerate(permutations_to_try):
+    for ordinal, order in enumerate(CANDIDATE_ORDERS):
         candidate = contract(2)
         candidate["fields"] = [fields[i] for i in order]
         path = case / f"layout-{ordinal}.json"

@@ -33,6 +33,38 @@ orderkey query --out telemetry-selected --where examples/telemetry/where.json --
 
 ## 策略与重建
 
+### 跨批选型与留出验收
+
+`compare-batches` 接受 2–5 份冻结导出。沿用批次清单的 `schema_version: 1`，每项填写 `id`、`input`、`source_contract`、`queries` 和可选的 `policy`。相对路径以清单所在目录为准。`--anchor` 指定用来生成重建方案的批次。所有批次的源契约、查询文件和策略摘要必须一致。
+
+~~~sh
+orderkey compare-batches --batches assessment.json --anchor two-weeks --candidate target.json --out proposal
+~~~
+
+可重复传入 `--candidate` 或使用 `--auto`，共比较源布局与最多八套目标。每条查询填写扫描行数上限和 1–16 的区间上限。任意批次违反预算、前缀或顺序约束都会淘汰该布局。合格布局依次比较最差批次和所有批次的加权扫描行数，并列优先保留源布局。
+
+`comparison-batches.json` 列出各布局的最差批次、逐查询扫描量、质量约束和失败原因。选中新布局后，方案目录同时包含标准 v2 `selection.json`、`target.contract` 和 `assessment.json`。后者绑定清单、各输入、锁定的工作负载和所选契约。键集摘要按键字典序计算，每个键前写入 4 字节大端长度，载荷变化和行序变化均保留相同的键集身份。
+
+~~~sh
+orderkey build-selected --input two-weeks.jsonl --source-contract source.json --queries workload.json \
+  --selection proposal --assessment-batches assessment.json --assessment-sha256 "$APPROVED_ASSESSMENT_SHA256" \
+  --out anchor-index
+~~~
+
+有策略文件时，在重建命令同时传入 `--policy`。恢复沿用全部参数并加 `--resume`。评估清单和评估输入应在重建及恢复期间保持冻结。
+
+留出批次独立建库，使用同一 `target.contract`。将该批次的清单与两个批准摘要交给验收命令。
+
+~~~sh
+orderkey gate-batch --selection proposal --selection-sha256 "$APPROVED_SELECTION_SHA256" \
+  --assessment-sha256 "$APPROVED_ASSESSMENT_SHA256" --batches holdout.json --batch-id late \
+  --delivery late-index --scan-mode bounded --out approval
+~~~
+
+验收拒绝已参与评估的键集。通过时，回执记录评估摘要、新键集摘要与双引擎实测。调用方用可信渠道取得回执 SHA-256 后可用 `ApprovedReader` 分页。发行包中的 `replay-batch-selection` 提供可直接运行的 USGS 流程。
+
+### 单批策略
+
 可在两个命令上使用 `--policy FILE`，文件内容示例
 
 ~~~json

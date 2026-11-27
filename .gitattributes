@@ -10,3 +10,5 @@
 /examples/earthquakes/replay-bounded.cmd text eol=crlf
 /examples/earthquakes/replay-bounded-selection.sh text eol=lf
 /examples/earthquakes/replay-bounded-selection.cmd text eol=crlf
+/examples/earthquakes/replay-batch-selection.sh text eol=lf
+/examples/earthquakes/replay-batch-selection.cmd text eol=crlf

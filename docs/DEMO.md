@@ -1,5 +1,19 @@
 # 约 90 秒演示
 
+## v0.2.0 跨批选型与留出验收
+
+解压发行包。Windows 运行 `replay-batch-selection.cmd`，Linux 运行 `sh replay-batch-selection.sh`。默认把结果写到 `batch-selection-replay`，也可传入一个新的输出目录。
+
+| 时间 | 展示 | 现场证据 |
+|---|---|---|
+| 0–15 秒 | 首周两个布局都扫 593 条，单批选型保留源布局 | `first-week/comparison.json` |
+| 15–35 秒 | 加入前两周的导出，4 区间时源布局最差 623 条，候选 613 条 | `selection-4/comparison-batches.json` |
+| 35–55 秒 | 真实终止重建，拒绝未完成交付，按批准摘要恢复 | `interruption.stdout`、`incomplete.stdout`、`anchor-ready.json` |
+| 55–75 秒 | 导入三周留出数据。3 区间实测 673 条超预算，4 区间实测 646 条通过 | 两份 `batch-receipt.json` |
+| 75–90 秒 | SDK 分 20 页读出 593 条，跨回执续页被拒绝 | `consumer.json` |
+
+演示使用随包分发的批准摘要。完整 SQLite 对照与异常验收见 `verification/batch-selection-report.json`。规模对照见 `verification/batch-layout-benchmark.json`。 [下载程序、报告及演示](https://github.com/WeiR-h/orderkey/releases/tag/v0.2.0)
+
 ## v0.1.22 从选型、恢复到批准读取
 
 解压发行包后，Windows 运行 `replay-bounded-selection.cmd`，Linux 运行 `sh replay-bounded-selection.sh`。

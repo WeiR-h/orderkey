@@ -145,6 +145,8 @@ def verify_batch_comparison(exe, root, case, rows):
     assert changed["error"] == "batch training differs in source contract, workload, or policy"
     return {"ready": True, "single_batch_status": first["status"], "comparisons": comparisons,
             "holdout_unavailable_during_selection": True,
+            "approvals": {f"cap_{cap}": {f"{artifact}_sha256": sha(root / f"assessment-{cap}" / f"{artifact}.json")
+                                        for artifact in ("selection", "assessment")} for cap in (3, 4)},
             "blocked_before_build": blocked, "lower_total_loses_on_worst_batch": True,
             "reordered_key_set_rejected": True, "changed_workload_rejected": True}
 

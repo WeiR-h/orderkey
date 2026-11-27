@@ -41,7 +41,8 @@ def main():
            [sys.executable,'scripts/verify_consumer.py','--report',str(OUT/'consumer-report.json')],
            [sys.executable,'scripts/verify_approved_consumer.py','--report',str(OUT/'approved-consumer-report.json')],
            [sys.executable,'scripts/benchmark.py','--report',str(OUT/'benchmark.json')],
-           [sys.executable,'scripts/benchmark_layouts.py','--report',str(OUT/'layout-benchmark.json')]]
+           [sys.executable,'scripts/benchmark_layouts.py','--report',str(OUT/'layout-benchmark.json')],
+           [sys.executable,'scripts/benchmark_batch_selection.py','--report',str(OUT/'batch-layout-benchmark.json')]]
     try:
         for command in steps:
             print('Checking: '+' '.join(command),flush=True)

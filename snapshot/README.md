@@ -6,6 +6,8 @@ Import `WeiR-h/orderkey_snapshot` and `WeiR-h/orderkey`. `Reader::open(directory
 
 Use `Reader::open_selected(directory, expected_selection_sha256=...)` to verify a selected training delivery. A bounded delivery carries its original v2 `selection.json` and measured rank ranges. The reader checks the selection digest, scan mode, budgets and ranges against the delivery.
 
+A cross-batch rebuild carries `assessment.json`. The reader checks the copy against the assessment digest in the job receipt. A holdout receipt from `gate-batch` carries the approved assessment and holdout key-set digests and can be read through the existing approved reader.
+
 Use `ApprovedReader::open(directory, receipt, expected_sha256)` for a snapshot approved by `gate-batch`. Supply the receipt digest from trusted release configuration. Call `reader.query(id, predicate, cursor~)` with the approved query ID and typed predicate. The receipt supplies the scan mode and page size. The example in `examples/approved` reads an approved USGS snapshot after the original exports have been removed.
 
 This module depends on MoonFST (MIT), async and sha256 (Apache-2.0). It does not open MoonLSM. The core module remains standard-library-only. MIT license; reference and dependency notices are in the repository THIRD_PARTY.md. No independent user adoption is claimed.

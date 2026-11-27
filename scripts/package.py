@@ -16,6 +16,7 @@ from verify_audit import cases as audit_cases
 from verify_earthquakes import CASE as EARTHQUAKES, cases as earthquake_cases
 from verify_approved_consumer import CONSUMER
 from verify_bounded import comcat_case
+from verify_batch_selection import make_batch_case
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -43,6 +44,8 @@ def main():
     files[bounded_replay] = EARTHQUAKES / bounded_replay
     selected_replay = "replay-bounded-selection.cmd" if os.name == "nt" else "replay-bounded-selection.sh"
     files[selected_replay] = EARTHQUAKES / selected_replay
+    batch_replay = "replay-batch-selection.cmd" if os.name == "nt" else "replay-batch-selection.sh"
+    files[batch_replay] = EARTHQUAKES / batch_replay
     files[CONSUMER] = ROOT / "_build/bin" / CONSUMER
     weather = "weather_capture.exe" if os.name == "nt" else "weather_capture"
     files[weather]=weather_binary()
@@ -59,7 +62,8 @@ def main():
                    "snapshot-report.json","consumer-report.json","layouts-report.json","delivery-report.json",
                    "capture-report.json","audit-report.json","gate-report.json","earthquakes-report.json",
                    "segmented-report.json", "batch-report.json", "approved-consumer-report.json",
-                   "bounded-report.json", "bounded-selection-report.json",
+                   "bounded-report.json", "bounded-selection-report.json", "batch-selection-report.json",
+                   "batch-layout-benchmark.json",
                    "layout-benchmark.json","acceptance.json"):
         if not (ROOT/"_build/acceptance"/report).is_file():raise RuntimeError("required acceptance report missing: "+report)
         if (ROOT/"_build/acceptance"/report).is_file():
@@ -92,6 +96,21 @@ def main():
             for path in bounded.rglob("*"):
                 if path.is_file():
                     files["examples/" + path.relative_to(temp).as_posix()] = path
+        batch_case = temp / "batch-selection"
+        make_batch_case(batch_case)
+        approvals = json.loads((ROOT / "_build/acceptance/batch-selection-report.json").read_bytes())["approvals"]
+        for cap in (3, 4):
+            for name in ("selection", "assessment"):
+                approved = batch_case / f"approved-{name}-{cap}.sha256"
+                approved.write_text(approvals[f"cap_{cap}"][f"{name}_sha256"] + "\n", encoding="ascii")
+                files[f"examples/batch-selection/{approved.name}"] = approved
+            for name in ("assessment", "holdout"):
+                leaf = f"{name}-{cap}.json"
+                files[f"examples/batch-selection/{leaf}"] = batch_case / leaf
+        for leaf in ("training/input.jsonl", "training/source.json", "training/target.json",
+                     "training/workload-3.json", "training/workload-4.json", "middle/input.jsonl"):
+            files[f"examples/batch-selection/{leaf}"] = batch_case / leaf
+        files["examples/batch-selection/withheld/input.jsonl"] = batch_case / "late/input.jsonl"
         regression=temp/"regression"
         audit_cases(regression)
         files["examples/regression/batches.json"]=regression/"batches.json"

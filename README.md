@@ -1,8 +1,8 @@
 # OrderKey
 
-**OrderKey 用扫描行数和区间数预算选择有序 KV 二级索引布局，并验收实际交付快照。** USGS 两周训练批上，单段比较无可行布局，双预算选中扫描 613 条的布局。末批按 4 个区间实测 646 条，通过 650 条预算。SDK 凭回执分页读完 593 条。 [下载 Windows / Linux 复验包](https://github.com/WeiR-h/orderkey/releases/tag/v0.1.22) · [技术摘要](docs/REVIEW.md) · [一键复验与演示](docs/DEMO.md)
+**OrderKey 用多份有序 KV 导出的扫描行数和区间数预算选择复合索引，并验收交付快照。** 在冻结的 USGS 数据上，首周单批比较保留原布局。加入前两周的数据后选出候选，第三周交付实测扫描 646 条，通过 650 条预算。SDK 凭回执分页读完 593 条。 [下载 Windows / Linux 复验包](https://github.com/WeiR-h/orderkey/releases/tag/v0.2.0) · [技术摘要](docs/REVIEW.md) · [一键复验与演示](docs/DEMO.md)
 
-解压发行包后，Windows 运行 `replay-bounded-selection.cmd`，Linux 运行 `sh replay-bounded-selection.sh`。复验覆盖选型、真实中断与恢复、末批判定和 SDK 分页。
+解压发行包后，Windows 运行 `replay-batch-selection.cmd`，Linux 运行 `sh replay-batch-selection.sh`。复验覆盖跨批选型、真实中断恢复、留出验收和 SDK 分页。
 
 OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储引擎生成复合键和扫描区间。调用方固定索引的字段类型与升降序后，可以按前导字段查找、在下一字段限定区间，或从上一页末尾继续扫描。
 
@@ -44,11 +44,11 @@ python scripts/benchmark.py --report benchmark.json
 
 ## 使用示例
 
-从 Mooncakes 安装 v0.1.22 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
+从 Mooncakes 安装 v0.2.0 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
 
 ```sh
-moon add WeiR-h/orderkey@0.1.22
-moon add WeiR-h/orderkey_snapshot@0.1.22
+moon add WeiR-h/orderkey@0.2.0
+moon add WeiR-h/orderkey_snapshot@0.2.0
 ```
 
 在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。
