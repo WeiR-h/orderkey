@@ -51,8 +51,8 @@ async fn gate_batch(args : Array[String]) -> Unit {
     let options = layout_options(
       args,
       [
-        "--selection", "--selection-sha256", "--batches", "--batch-id", "--delivery",
-        "--scan-mode", "--out",
+        "--selection", "--selection-sha256", "--assessment-sha256", "--batches",
+        "--batch-id", "--delivery", "--scan-mode", "--out",
       ],
       [],
     )
@@ -94,6 +94,24 @@ async fn gate_batch(args : Array[String]) -> Unit {
         invalid("selection differs from approved SHA-256")
       }
       evidence.push(("selection_sha256", Json::string(expected)))
+      let assessment = match options.paths.get("--assessment-sha256") {
+        Some([approved]) => {
+          if !(mode is Bounded) {
+            invalid("assessed gate requires bounded scan mode")
+          }
+          let selected = @json.parse(
+            @utf8.decode(selected_raw),
+            reject_duplicate_keys=true,
+          )
+          let assessment = read_assessment(
+            selection, approved, selected, expected,
+          )
+          evidence.push(("assessment_sha256", Json::string(assessment.sha256)))
+          Some(assessment)
+        }
+        None if !@fs.exists(selection + "/assessment.json") => None
+        _ => raise Invalid("assessed gate requires --assessment-sha256")
+      }
       stage = "batch"
       let batch_file = @fs.realpath(options.path("--batches"))
       let raw = read(batch_file, maximum=1048576)
@@ -140,6 +158,15 @@ async fn gate_batch(args : Array[String]) -> Unit {
         Json::string(hash(queries)) != field(digests, "workload_sha256") {
         invalid("batch input changed after audit")
       }
+      if assessment is Some(approved) {
+        let keys = keys_sha256(input.rows)
+        for batch_id, identity in approved.identities {
+          if identity.keys_sha256 == keys {
+            invalid("holdout reuses assessed key set: " + batch_id)
+          }
+        }
+        evidence.push(("holdout_keys_sha256", Json::string(keys)))
+      }
       stage = "delivery"
       let delivery = options.path("--delivery")
       if @fs.kind(delivery, follow_symlink=false) != @fs.Directory {
@@ -166,6 +193,10 @@ async fn gate_batch(args : Array[String]) -> Unit {
         read(selection + "/selection.json", maximum=1048576) != selected_raw ||
         Json::string(hash(contract(target_path).to_bytes())) != target_digest {
         invalid("selection or batch changed during gate")
+      }
+      if assessment is Some(approved) &&
+        read(approved.path, maximum=1048576) != approved.raw {
+        invalid("assessment changed during gate")
       }
       evidence.push(("queries", measured))
       evidence.push(("manifest_sha256", field(result, "manifest_sha256")))

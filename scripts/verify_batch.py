@@ -18,12 +18,12 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def gate_batch(exe, selection, batches, batch_id, delivery, mode, out, expected):
+def gate_batch(exe, selection, batches, batch_id, delivery, mode, out, expected, *, extra=()):
     completed = subprocess.run([
         str(exe), "gate-batch", "--selection", str(selection),
         "--selection-sha256", sha(selection / "selection.json"),
         "--batches", str(batches), "--batch-id", batch_id,
-        "--delivery", str(delivery), "--scan-mode", mode, "--out", str(out),
+        "--delivery", str(delivery), "--scan-mode", mode, "--out", str(out), *extra,
     ], capture_output=True, text=True, encoding="utf-8", timeout=180)
     assert completed.returncode == expected, (completed.stdout, completed.stderr)
     receipt = read_json(out / "batch-receipt.json")

@@ -4,10 +4,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 
-from verify_bounded import comcat_case, sqlite_oracle, write_export
-from verify_batch import sha
+from verify_approved_consumer import copy_candidate
+from verify_bounded import comcat_case, read_global_week, sqlite_oracle, write_export
+from verify_batch import approved_args, gate_batch, sha
 from verify_bounded_selection import check_training_delivery, compare, sqlite_costs
 from verify_cli import ROOT, run
 from verify_delivery import interrupt_selected_workload
@@ -77,8 +79,15 @@ def verify_batch_comparison(exe, root, case, rows):
     first = compare(exe, case / "training", 4, root / "single")
     assert first["status"] == "keep_source"
     comparisons = {}
+    holdout, withheld = case / "late/input.jsonl", root / "withheld.jsonl"
+    holdout.rename(withheld)
+    try:
+        for cap in (3, 4):
+            comparisons[f"cap_{cap}"] = compare_batches(exe, case, f"assessment-{cap}.json", root / f"assessment-{cap}")
+    finally:
+        withheld.rename(holdout)
     for cap in (3, 4):
-        report = compare_batches(exe, case, f"assessment-{cap}.json", root / f"assessment-{cap}")
+        report = comparisons[f"cap_{cap}"]
         assert report["status"] == "selected" and report["anchor"] == "middle"
         assert [(b["id"], b["rows"]) for b in report["batches"]] == [("middle", 1021), ("training", 599)]
         for batch in report["batches"]:
@@ -94,8 +103,6 @@ def verify_batch_comparison(exe, root, case, rows):
                 assert not query["order_changed"] and not query["failures"]
             assert layout["worst_batch"] == "middle" and layout["worst_weighted_scans"] == middle_cost
             assert layout["total_weighted_scans"] == sum(measured)
-        comparisons[f"cap_{cap}"] = report
-
     blocked_manifest = case / "includes-late.json"
     write_batches(blocked_manifest, [batch_entry(name, 3) for name in ("middle", "late")])
     blocked = compare_batches(exe, case, blocked_manifest.name, root / "blocked")
@@ -137,6 +144,7 @@ def verify_batch_comparison(exe, root, case, rows):
     changed = compare_batches(exe, case, "changed.json", root / "changed", success=False)
     assert changed["error"] == "batch training differs in source contract, workload, or policy"
     return {"ready": True, "single_batch_status": first["status"], "comparisons": comparisons,
+            "holdout_unavailable_during_selection": True,
             "blocked_before_build": blocked, "lower_total_loses_on_worst_batch": True,
             "reordered_key_set_rejected": True, "changed_workload_rejected": True}
 
@@ -209,6 +217,76 @@ def verify_assessed_recovery(exe, root, case):
             "assessment_sha256": sha(evidence), "measured": accepted}
 
 
+def verify_assessed_holdout(exe, root, case, records):
+    delivery = root / "late-index"
+    options = [
+        "--input", str(case / "late/input.jsonl"), "--source-contract", str(case / "training/source.json"),
+        "--target-contract", str(root / "assessment-4/target.contract"), "--out", str(delivery),
+    ]
+    run(exe, "build", options)
+    key_digest = key_set_digest(case / "late/input.jsonl")
+    receipts = {}
+
+    def gate(name, cap=4, status=0, *, manifest=None, batch="late", extra=None):
+        selection = root / f"assessment-{cap}"
+        if extra is None:
+            extra = ["--assessment-sha256", sha(selection / "assessment.json")]
+        return gate_batch(exe, selection, case / (manifest or f"holdout-{cap}.json"), batch,
+                          delivery, "bounded", root / name, status, extra=extra)
+
+    for cap, looked_up, status in ((3, 673, 1), (4, 646, 0)):
+        receipt = gate(f"holdout-{cap}", cap, status)
+        receipts[f"cap_{cap}"] = receipt
+        assert receipt["assessment_sha256"] == sha(root / f"assessment-{cap}/assessment.json")
+        assert receipt["holdout_keys_sha256"] == key_digest and receipt["snapshot_rows"] == 1516
+        assert receipt["manifest_sha256"] == sha(delivery / "manifest.json")
+        result, = receipt["queries"]
+        assert result["target_scanned"] == result["fst_scanned"] == result["predicted_scanned"] == looked_up
+        assert result["matched"] == 593 and result["max_target_windows"] == cap
+        assert result["max_target_scanned"] == 650 and result["within_budget"] == (status == 0)
+        assert result["results_match"] and result["pagination_match"]
+        assert result["rank_windows"] != read_json(root / f"assessment-{cap}/selection.json")[
+            "predictions"][0]["bounded_scan"]["rank_windows"]
+    assert receipts["cap_3"]["manifest_sha256"] == receipts["cap_4"]["manifest_sha256"]
+    assert "assessed gate requires" in gate("missing-assessment", status=2, extra=())["error"]
+    assert "differs from approved SHA-256" in gate("bad-approval", status=2, extra=[
+        "--assessment-sha256", "0" * 64])["error"]
+    assert gate("changed-holdout-budget", 3, 2, manifest="holdout-4.json")["error"] == (
+        "locked audit: workload_sha256 differs from selection")
+    reused = gate("reused-assessment", status=2, manifest="duplicate.json", batch="alias")
+    assert reused["error"] == "holdout reuses assessed key set: training" and reused["stage"] == "batch"
+    fst = delivery / "target.fst"
+    saved = fst.read_bytes()
+    try:
+        fst.write_bytes(saved[:-1])
+        assert gate("damaged-holdout", status=2)["stage"] == "delivery"
+    finally:
+        fst.write_bytes(saved)
+
+    # The consumer receives only a snapshot, a receipt, and an independent approved digest.
+    saved_approval = root / "portable-approval.json"
+    approved = root / "holdout-4/batch-receipt.json"
+    shutil.copyfile(approved, saved_approval)
+    portable = root / "portable-holdout"
+    copy_candidate(delivery, portable)
+    where = case / "where.json"
+    expected, _ = sqlite_oracle(records)
+    approved_query = approved_args(portable, saved_approval, where)
+    fields = read_json(case / "training/target.json")["fields"]
+    cursor, pages, payload, result = read_global_week(exe, approved_query, expected, fields)
+    assert all(r["queries"][0]["ordered_result_sha256"] == result for r in receipts.values())
+    wrong = approved_args(portable, root / "holdout-3/batch-receipt.json", where)
+    assert "batch receipt is not approved" in run(exe, "query-approved", wrong, success=False)
+    other = root / "other-approved/batch-receipt.json"
+    gate(other.parent.name)
+    assert sha(other) != sha(saved_approval)
+    run(exe, "query-approved", [*approved_args(portable, other, where), "--cursor", cursor], success=False)
+    return {**receipts, "approved_page_sizes": pages, "sqlite_payload_sha256": payload,
+            "reused_key_set_rejected": True, "changed_budget_rejected": True,
+            "corrupt_delivery_rejected": True, "unapproved_receipt_rejected": True,
+            "cross_receipt_cursor_rejected": True, "portable_receipt_verified": True}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True, type=Path)
@@ -218,10 +296,12 @@ def main():
     with tempfile.TemporaryDirectory(dir=ROOT / "_build", prefix="batch-selection-") as tmp:
         base = Path(tmp)
         case = base / "comcat"
-        proof = verify_batch_comparison(exe, base, case, make_batch_case(case))
+        records = make_batch_case(case)
+        proof = verify_batch_comparison(exe, base, case, records)
         proof["recovery"] = verify_assessed_recovery(exe, base, case)
+        proof["holdout"] = verify_assessed_holdout(exe, base, case, records)
     write_lf_json(args.report, proof)
-    print("Cross-batch selection agrees with SQLite, rejects changed inputs and resumes the approved layout")
+    print("Cross-batch holdout: 673 rejected, 646 approved, 593 portable rows match SQLite")
 
 
 if __name__ == "__main__":
