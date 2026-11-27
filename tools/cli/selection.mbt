@@ -8,6 +8,7 @@ struct SelectedLayout {
   digests : Json
   predictions : Json
   target_digest : String
+  assessment_inputs : AssessmentInputs?
 }
 
 ///|
@@ -26,7 +27,7 @@ async fn prepare_selection(args : Array[String]) -> SelectedLayout {
     args,
     [
       "--input", "--source-contract", "--queries", "--policy", "--selection", "--out",
-      "--fail-after", "--pause-after", "--fail-io",
+      "--fail-after", "--pause-after", "--fail-io", "--assessment-batches", "--assessment-sha256",
     ],
     ["--resume"],
   )
@@ -65,23 +66,49 @@ async fn prepare_selection(args : Array[String]) -> SelectedLayout {
   if !score.eligible || score.predictions != field(selection, "predictions") {
     invalid("selected layout no longer matches its predictions or policy")
   }
-  let identity = object(
-    metadata +
-    [
-      ("selection_sha256", Json::string(hash(raw))),
-      ("digests", input.digests),
-      ("target_contract_sha256", Json::string(target_digest)),
-    ],
-  )
+  let selection_sha256 = hash(raw)
+  let assessment_inputs = match
+    (
+      options.paths.get("--assessment-batches"),
+      options.paths.get("--assessment-sha256"),
+    ) {
+    (Some([manifest]), Some([approved])) => {
+      let assessment = read_assessment(
+        dir, approved, selection, selection_sha256,
+      )
+      guard assessment.identities.get(assessment.anchor) is Some(anchor) &&
+        anchor.keys_sha256 == keys_sha256(input.rows) else {
+        raise Invalid("assessment anchor key set differs from selected input")
+      }
+      let batches = read_layout_batches(manifest)
+      let inputs : AssessmentInputs = { assessment, batches, }
+      inputs.check()
+      Some(inputs)
+    }
+    (None, None) if !@fs.exists(dir + "/assessment.json") => None
+    _ =>
+      raise Invalid(
+        "assessed build requires --assessment-batches and --assessment-sha256",
+      )
+  }
+  let bindings = [
+    ("selection_sha256", Json::string(selection_sha256)),
+    ("digests", input.digests),
+    ("target_contract_sha256", Json::string(target_digest)),
+  ]
+  if assessment_inputs is Some(inputs) {
+    bindings.push(("assessment_sha256", Json::string(inputs.assessment.sha256)))
+  }
   {
     options,
     mode,
     raw,
     target_path,
-    identity,
+    identity: object(metadata + bindings),
     digests: input.digests,
     predictions: score.predictions,
     target_digest,
+    assessment_inputs,
   }
 }
 
@@ -100,6 +127,9 @@ async fn check_selection_identity(selection : SelectedLayout) -> Unit {
     field(selection.identity, "selection_sha256") {
     invalid("selection inputs changed during the job")
   }
+  if selection.assessment_inputs is Some(inputs) {
+    inputs.check()
+  }
 }
 
 ///|
@@ -110,6 +140,7 @@ async fn build_selected(
 ) -> Unit {
   let binding = dir + "/selection-job.json"
   let selection_file = dir + "/selection.json"
+  let assessment_file = dir + "/assessment.json"
   let bounded = selection.mode is Bounded
   if selection.options.switches.contains("--resume") {
     if !@fs.exists(binding) ||
@@ -117,10 +148,18 @@ async fn build_selected(
       (bounded && read(selection_file, maximum=1048576) != selection.raw) {
       invalid("selected job identity differs")
     }
+    if selection.assessment_inputs is Some(inputs) &&
+      read(assessment_file, maximum=1048576) != inputs.assessment.raw {
+      invalid("delivered assessment differs from the approved job")
+    }
   } else {
     if bounded {
       put(selection_file + ".tmp", selection.raw)
       @fs.rename(selection_file + ".tmp", selection_file)
+    }
+    if selection.assessment_inputs is Some(inputs) {
+      put(assessment_file + ".tmp", inputs.assessment.raw)
+      @fs.rename(assessment_file + ".tmp", assessment_file)
     }
     atomic_json(binding, selection.identity)
   }
@@ -187,6 +226,10 @@ async fn build_selected(
     check_selection_identity(selection)
     if bounded && read(selection_file, maximum=1048576) != selection.raw {
       invalid("delivered selection changed during rebuild")
+    }
+    if selection.assessment_inputs is Some(inputs) &&
+      read(assessment_file, maximum=1048576) != inputs.assessment.raw {
+      invalid("delivered assessment changed during rebuild")
     }
     let report = object([
       ("schema_version", version),

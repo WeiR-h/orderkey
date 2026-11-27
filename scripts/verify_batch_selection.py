@@ -7,8 +7,10 @@ from pathlib import Path
 import tempfile
 
 from verify_bounded import comcat_case, sqlite_oracle, write_export
-from verify_bounded_selection import compare, sqlite_costs
+from verify_batch import sha
+from verify_bounded_selection import check_training_delivery, compare, sqlite_costs
 from verify_cli import ROOT, run
+from verify_delivery import interrupt_selected_workload
 from verify_earthquakes import HIGH, LOW, write_lf_json
 from verify_layouts import read_json
 
@@ -42,7 +44,19 @@ def compare_batches(exe, case, manifest, out, *, anchor="middle", success=True):
     ], success=success))
     if success:
         assert result == read_json(out / "comparison-batches.json")
-        assert {f.name for f in out.iterdir()} == {"comparison-batches.json"}
+        expected = {"comparison-batches.json"}
+        if result["status"] == "selected":
+            expected.update(("target.contract", "selection.json", "assessment.json"))
+            evidence = read_json(out / "assessment.json")
+            anchor_entry, = [batch for batch in result["batches"] if batch["id"] == anchor]
+            selected = read_json(out / "selection.json")
+            assert evidence["schema_version"] == 1 and evidence["anchor"] == anchor
+            assert evidence["batches_sha256"] == sha(case / manifest)
+            assert evidence["batches"] == result["batches"]
+            assert evidence["selection_sha256"] == sha(out / "selection.json")
+            assert evidence["target_contract_sha256"] == sha(out / "target.contract")
+            assert selected["schema_version"] == 2 and selected["digests"] == anchor_entry["digests"]
+        assert {f.name for f in out.iterdir()} == expected
     else:
         assert not out.exists() and result["ready"] is False
     return result
@@ -127,6 +141,74 @@ def verify_batch_comparison(exe, root, case, rows):
             "reordered_key_set_rejected": True, "changed_workload_rejected": True}
 
 
+def assessed_build_args(case, selection, cap):
+    return ["--input", str(case / "middle/input.jsonl"),
+            "--source-contract", str(case / "training/source.json"),
+            "--queries", str(case / f"training/workload-{cap}.json"),
+            "--selection", str(selection), "--assessment-batches", str(case / f"assessment-{cap}.json"),
+            "--assessment-sha256", sha(selection / "assessment.json")]
+
+
+def verify_assessed_recovery(exe, root, case):
+    selection = root / "assessment-4"
+    resumed = root / "anchor-restored"
+    clean = root / "anchor-clean"
+    args = assessed_build_args(case, selection, 4)
+    command = [*args, "--out", str(resumed)]
+    skipped = run(exe, "build-selected", [*args[:-4], "--out", str(root / "missing-approval")], success=False)
+    assert "assessed build requires" in skipped and not (root / "missing-approval").exists()
+    interrupt_selected_workload(exe, command)
+    receipt = resumed / "selection-report.json"
+    old = receipt.read_bytes()
+    assert not read_json(receipt)["ready"]
+    denied = run(exe, "verify-delivery", ["--out", str(resumed)], success=False)
+    assert json.loads(denied)["error"] == "selected workload is not ready for delivery"
+
+    assessed_input = case / "training/input.jsonl"
+    manifest = case / "assessment-4.json"
+    evidence = selection / "assessment.json"
+    copied = resumed / "assessment.json"
+    mutations = [
+        (assessed_input, b"".join(reversed(assessed_input.read_bytes().splitlines(keepends=True))),
+         "assessed batch changed: training"),
+        (manifest, manifest.read_bytes() + b"\n", "batch manifest differs"),
+        (evidence, evidence.read_bytes() + b"\n", "assessment differs from approved"),
+        (copied, copied.read_bytes() + b"\n", "delivered assessment differs"),
+    ]
+    for path, mutated, message in mutations:
+        raw = path.read_bytes()
+        try:
+            path.write_bytes(mutated)
+            report = run(exe, "build-selected", [*command, "--resume"], success=False)
+            assert message in json.loads(report)["error"], report
+            assert receipt.read_bytes() == old
+        finally:
+            path.write_bytes(raw)
+    other = assessed_build_args(case, root / "assessment-3", 3)
+    error = run(exe, "build-selected", [*other, "--out", str(resumed), "--resume"], success=False)
+    assert json.loads(error)["error"] == "selected job identity differs" and receipt.read_bytes() == old
+
+    run(exe, "build-selected", [*command, "--resume"])
+    run(exe, "build-selected", [*args, "--out", str(clean)])
+    accepted = check_training_delivery(exe, resumed, selection, 613)
+    fresh = check_training_delivery(exe, clean, selection, 613)
+    assert accepted["ordered_result_sha256"] == fresh["ordered_result_sha256"]
+    assert (resumed / "records.jsonl").read_bytes() == (clean / "records.jsonl").read_bytes()
+    assert copied.read_bytes() == evidence.read_bytes()
+    assert read_json(receipt)["job"]["assessment_sha256"] == sha(evidence)
+
+    raw = copied.read_bytes()
+    try:
+        copied.write_bytes(raw + b"\n")
+        result = run(exe, "verify-delivery", ["--out", str(resumed)], success=False)
+        assert json.loads(result)["error"] == "assessment differs from delivery receipt"
+    finally:
+        copied.write_bytes(raw)
+    return {"interrupted": True, "incomplete_rejected": True, "matches_clean": True,
+            "rejected_resumes": len(mutations) + 1, "corrupt_assessment_rejected": True,
+            "assessment_sha256": sha(evidence), "measured": accepted}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True, type=Path)
@@ -137,8 +219,9 @@ def main():
         base = Path(tmp)
         case = base / "comcat"
         proof = verify_batch_comparison(exe, base, case, make_batch_case(case))
+        proof["recovery"] = verify_assessed_recovery(exe, base, case)
     write_lf_json(args.report, proof)
-    print("Cross-batch selection agrees with SQLite and blocks the known over-budget layout before building")
+    print("Cross-batch selection agrees with SQLite, rejects changed inputs and resumes the approved layout")
 
 
 if __name__ == "__main__":

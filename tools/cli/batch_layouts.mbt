@@ -87,6 +87,7 @@ struct BatchLayoutScore {
   mut worst_batch : String
   mut worst_weighted : Int64
   mut total_weighted : Int64
+  mut anchor_predictions : Json
   reports : Array[Json]
 }
 
@@ -112,6 +113,7 @@ fn assess_batch(
   batch : LayoutBatch,
   input : LayoutInput,
   layouts : Array[BatchLayoutScore],
+  anchor~ : Bool = false,
 ) -> AssessedBatch raise {
   let mode : ScanMode = Bounded
   for query in input.queries {
@@ -119,6 +121,9 @@ fn assess_batch(
   }
   for layout in layouts {
     let score = evaluate_layout(input, layout.contract, layout.baseline, mode~)
+    if anchor {
+      layout.anchor_predictions = score.predictions
+    }
     layout.eligible = layout.eligible && score.eligible
     layout.total_weighted += score.weighted
     if score.weighted > layout.worst_weighted ||
@@ -164,9 +169,10 @@ async fn start_batch_comparison(
     worst_batch: "",
     worst_weighted: -1L,
     total_weighted: 0L,
+    anchor_predictions: Json::null(),
     reports: [],
   })
-  (layouts, assess_batch(anchor, input, layouts))
+  (layouts, assess_batch(anchor, input, layouts, anchor=true))
 }
 
 ///|
@@ -261,7 +267,8 @@ async fn compare_batches(args : Array[String]) -> Unit {
   if read(batches.path, maximum=1048576) != batches.raw {
     invalid("batch manifest changed during comparison")
   }
-  let (status, target) = match best_batch_layout(layouts) {
+  let best = best_batch_layout(layouts)
+  let (status, target) = match best {
     None => ("no_feasible_candidate", Json::null())
     Some(best) if best.baseline => ("keep_source", Json::null())
     Some(best) => ("selected", Json::string(hash(best.contract.to_bytes())))
@@ -280,5 +287,27 @@ async fn compare_batches(args : Array[String]) -> Unit {
   let out = options.path("--out")
   @fs.mkdir(out, allow_exist=false)
   atomic_json(out + "/comparison-batches.json", report)
+  if best is Some(winner) && !winner.baseline {
+    let selection = layout_selection(
+      Bounded,
+      first.digests,
+      target,
+      winner.anchor_predictions,
+    )
+    let evidence = object([
+      ("schema_version", Json::number(1)),
+      ("anchor", Json::string(anchor_id)),
+      ("batches_sha256", field(report, "batches_sha256")),
+      (
+        "selection_sha256",
+        Json::string(hash(@utf8.encode(selection.stringify()))),
+      ),
+      ("target_contract_sha256", target),
+      ("batches", field(report, "batches")),
+    ])
+    put(out + "/target.contract", winner.contract.to_bytes())
+    atomic_json(out + "/assessment.json", evidence)
+    atomic_json(out + "/selection.json", selection)
+  }
   println(report.stringify())
 }

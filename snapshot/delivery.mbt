@@ -88,6 +88,12 @@ pub async fn Reader::open_selected(
     property(report, "job") != job {
     raise InvalidSnapshot("selection job differs from delivery receipt")
   }
+  if job is Object(fields) && fields.get("assessment_sha256") is Some(expected) {
+    let assessment = read_file(dir + "/assessment.json", maximum=1048576)
+    if !bounded || digest(assessment) != string(expected) {
+      raise InvalidSnapshot("assessment differs from delivery receipt")
+    }
+  }
   let selection_sha = string(property(job, "selection_sha256"))
   if selection_sha.length() != 64 ||
     @hex.decode(selection_sha[:]).length() != 32 {

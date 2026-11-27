@@ -314,6 +314,23 @@ fn selection_metadata(mode : ScanMode) -> Array[(String, Json)] {
 }
 
 ///|
+fn layout_selection(
+  mode : ScanMode,
+  digests : Json,
+  target : Json,
+  predictions : Json,
+) -> Json {
+  object(
+    selection_metadata(mode) +
+    [
+      ("digests", digests),
+      ("target_contract_sha256", target),
+      ("predictions", predictions),
+    ],
+  )
+}
+
+///|
 fn evaluate_layout(
   input : LayoutInput,
   target : @orderkey.IndexContract,
@@ -618,14 +635,7 @@ async fn compare_layouts(args : Array[String]) -> Unit {
     put(out + "/target.contract", target.to_bytes())
     atomic_json(
       out + "/selection.json",
-      object(
-        selection_metadata(mode) +
-        [
-          ("digests", input.digests),
-          ("target_contract_sha256", selected),
-          ("predictions", score.predictions),
-        ],
-      ),
+      layout_selection(mode, input.digests, selected, score.predictions),
     )
   }
   println(report.stringify())

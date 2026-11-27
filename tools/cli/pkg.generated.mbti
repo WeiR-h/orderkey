@@ -9,6 +9,12 @@ type CliError
 // Types and methods
 type AssessedBatch
 
+type AssessedIdentity
+
+type Assessment
+
+type AssessmentInputs
+
 type BatchLayoutScore
 
 type CapturedQuery
