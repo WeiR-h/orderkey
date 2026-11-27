@@ -7,9 +7,17 @@ package "WeiR-h/orderkey_cli"
 type CliError
 
 // Types and methods
+type AssessedBatch
+
+type BatchLayoutScore
+
 type CapturedQuery
 
 type Input
+
+type LayoutBatch
+
+type LayoutBatches
 
 type LayoutInput
 

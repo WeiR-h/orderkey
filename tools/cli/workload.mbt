@@ -81,13 +81,7 @@ fn measured_rows_sha256(rows : Array[Row]) -> String {
   let digest = @sha256.Digest::new()
   for row in rows {
     for bytes in [row.key, row.value] {
-      let length = bytes.length()
-      for shift in [24, 16, 8, 0] {
-        digest.write(((length >> shift) & 255).to_byte())
-      }
-      for byte in bytes {
-        digest.write(byte)
-      }
+      hash_framed(digest, bytes)
     }
   }
   digest.check_sum()

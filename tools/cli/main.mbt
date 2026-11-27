@@ -105,6 +105,10 @@ async fn execute(args : Array[String]) -> Unit {
     compare_layouts(args)
     return
   }
+  if command == "compare-batches" {
+    compare_batches(args)
+    return
+  }
   if command == "collect-queries" {
     collect_queries(args)
     return
@@ -257,7 +261,7 @@ async fn main {
     println(
       "OrderKey " +
       tool_version +
-      " version|plan|plan-ranges|build|resume|verify|verify-delivery|query|query-approved|explain|check-queries|collect-queries|compare-layouts|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
+      " version|plan|plan-ranges|build|resume|verify|verify-delivery|query|query-approved|explain|check-queries|collect-queries|compare-layouts|compare-batches|audit-layout|build-selected|gate-selected|gate-batch --out DIR",
     )
     return
   }

@@ -57,6 +57,17 @@ fn hash(bytes : Bytes) -> String {
 }
 
 ///|
+fn hash_framed(digest : @sha256.Digest, bytes : Bytes) -> Unit {
+  let length = bytes.length()
+  for shift in [24, 16, 8, 0] {
+    digest.write(((length >> shift) & 255).to_byte())
+  }
+  for byte in bytes {
+    digest.write(byte)
+  }
+}
+
+///|
 fn hex(bytes : Bytes) -> String {
   @hex.encode(bytes[:])
 }

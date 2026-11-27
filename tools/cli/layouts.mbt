@@ -529,30 +529,14 @@ fn add_automatic_layouts(
 }
 
 ///|
-async fn compare_layouts(args : Array[String]) -> Unit {
-  let options = layout_options(
-    args,
-    [
-      "--input", "--source-contract", "--queries", "--candidate", "--policy", "--out",
-      "--scan-mode",
-    ],
-    ["--auto"],
-  )
+async fn layout_candidates(
+  input : LayoutInput,
+  options : LayoutOptions,
+) -> Array[@orderkey.IndexContract] {
   let paths = options.paths.get("--candidate").unwrap_or([])
   if paths.length() > 8 ||
     (paths.is_empty() && !options.switches.contains("--auto")) {
     invalid("supply up to eight --candidate contracts and/or --auto")
-  }
-  let mode = match options.paths.get("--scan-mode") {
-    None | Some(["single"]) => Single
-    Some(["bounded"]) => Bounded
-    _ => raise Invalid("compare-layouts scan mode must be single or bounded")
-  }
-  let input = layout_input(options)
-  if mode is Bounded {
-    for query in input.queries {
-      mode.require_window_budget(query.window_budget)
-    }
   }
   let candidates = []
   let keys = [layout_key(input.source)]
@@ -568,6 +552,31 @@ async fn compare_layouts(args : Array[String]) -> Unit {
   if options.switches.contains("--auto") {
     add_automatic_layouts(input, candidates, keys)
   }
+  candidates
+}
+
+///|
+async fn compare_layouts(args : Array[String]) -> Unit {
+  let options = layout_options(
+    args,
+    [
+      "--input", "--source-contract", "--queries", "--candidate", "--policy", "--out",
+      "--scan-mode",
+    ],
+    ["--auto"],
+  )
+  let mode = match options.paths.get("--scan-mode") {
+    None | Some(["single"]) => Single
+    Some(["bounded"]) => Bounded
+    _ => raise Invalid("compare-layouts scan mode must be single or bounded")
+  }
+  let input = layout_input(options)
+  if mode is Bounded {
+    for query in input.queries {
+      mode.require_window_budget(query.window_budget)
+    }
+  }
+  let candidates = layout_candidates(input, options)
   let (reports, best) = evaluate_candidates(input, candidates, mode)
   if layout_digests(options) != input.digests {
     invalid("comparison inputs changed")
