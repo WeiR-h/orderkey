@@ -74,7 +74,7 @@ fn write_part(buffer : @buffer.Buffer, bytes : Bytes) -> Unit {
   for shift = 24; shift >= 0; shift = shift - 8 {
     buffer.write_byte((length >> shift).to_byte())
   }
-  buffer.write_bytes(bytes[:])
+  buffer.write_bytesview(bytes[:])
 }
 
 ///|
@@ -103,7 +103,7 @@ fn read_part(
 /// byte strings for index ID, v1 key layout, and each ordered field ID.
 pub fn IndexContract::to_bytes(self : IndexContract) -> Bytes {
   let buffer = @buffer.Buffer()
-  buffer.write_bytes(b"OKC\x01"[:])
+  buffer.write_bytesview(b"OKC\x01"[:])
   buffer.write_uint64_be(self.generation)
   write_part(buffer, self.index_id)
   write_part(buffer, self.spec.layout())
@@ -165,7 +165,7 @@ fn IndexContract::cursor_scope(
     Span(start, end) => (start, end)
   }
   let buffer = @buffer.Buffer()
-  buffer.write_bytes(b"OKP\x01"[:])
+  buffer.write_bytesview(b"OKP\x01"[:])
   write_part(buffer, self.to_bytes())
   write_part(buffer, snapshot_id)
   write_part(buffer, start)

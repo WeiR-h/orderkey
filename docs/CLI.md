@@ -1,4 +1,4 @@
-> v0.2.0 在建库前评估多个冻结批次，并对留出的快照实测两项预算。 [演示与命令](DEMO.md) · [技术摘要](REVIEW.md) · [跨批选型](LAYOUTS.md)
+> v0.2.1 使用 MoonBit 1.0 RC1 构建，在建库前评估多个冻结批次，并对留出的快照实测两项预算。 [演示与命令](DEMO.md) · [技术摘要](REVIEW.md) · [跨批选型](LAYOUTS.md)
 
 # Native file tool
 

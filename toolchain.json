@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "channel": "stable",
-  "version": "0.10.21+06da1ed44",
+  "version": "1.0.0-rc1+3c0520448",
   "upgrade_status": "installed",
-  "binary_url": "https://cli.moonbitlang.cn/binaries/latest/moonbit-windows-x86_64.zip",
-  "binary_sha256": "941b6596813861350d43e2fc92b4444f562f2b5589b07c1b82e5c62f07f47239",
-  "core_url": "https://cli.moonbitlang.cn/cores/core-0.10.21%2B06da1ed44.zip",
-  "core_sha256": "9dee22c988998e41c6b39dfeacca3f354d6ac9da2159afd9f9d9853bcad1cc36",
-  "version_all": "moon 0.1.20261117 (eb64713 2026-11-17) E:\\Project\\Competition\\MoonBit\\OrderKey\\.tools\\0.10.21+06da1ed44\\bin\\moon.exe\nmoonc v0.10.21+06da1ed44 (2026-11-16) E:\\Project\\Competition\\MoonBit\\OrderKey\\.tools\\0.10.21+06da1ed44\\bin\\moonc.exe\nmoonrun 0.1.20261117 (eb64713 2026-11-17) E:\\Project\\Competition\\MoonBit\\OrderKey\\.tools\\0.10.21+06da1ed44\\bin\\moonrun.exe\n"
+  "binary_url": "https://cli.moonbitlang.cn/binaries/1.0.0-rc1%2B3c0520448/moonbit-windows-x86_64.zip",
+  "binary_sha256": "6f2d0b32a2327decbcee14b39bd037c831ab055b6faf5bb9d1afe5db28fda0ab",
+  "core_url": "https://cli.moonbitlang.cn/cores/core-1.0.0-rc1%2B3c0520448.zip",
+  "core_sha256": "77e1b9c73a9aba7bfa7a5c06687ba7ab2335305c8328e168bdc25d9f6237a08c",
+  "version_all": "moon 0.1.20261126 (ccd306a 2026-11-26) E:\\Project\\Competition\\MoonBit\\OrderKey\\.tools\\1.0.0-rc1+3c0520448\\bin\\moon.exe\nmoonc v1.0.0-rc1+3c0520448 (2026-11-26) E:\\Project\\Competition\\MoonBit\\OrderKey\\.tools\\1.0.0-rc1+3c0520448\\bin\\moonc.exe\nmoonrun 0.1.20261126 (ccd306a 2026-11-26) E:\\Project\\Competition\\MoonBit\\OrderKey\\.tools\\1.0.0-rc1+3c0520448\\bin\\moonrun.exe\n"
 }

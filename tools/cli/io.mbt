@@ -184,7 +184,7 @@ fn rows_bytes(rows : Array[Row]) -> Bytes {
       ("key_hex", Json::string(hex(row.key))),
       ("value_hex", Json::string(hex(row.value))),
     ])
-    output.write_bytes(@utf8.encode(line.stringify())[:])
+    output.write_bytesview(@utf8.encode(line.stringify())[:])
     output.write_byte(10)
   }
   output.to_bytes()
@@ -194,7 +194,7 @@ fn rows_bytes(rows : Array[Row]) -> Bytes {
 fn prefixed(key : Bytes) -> Bytes {
   let output = @buffer.Buffer()
   output.write_byte(1)
-  output.write_bytes(key[:])
+  output.write_bytesview(key[:])
   output.to_bytes()
 }
 

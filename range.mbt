@@ -44,7 +44,7 @@ fn prefix_end(prefix : Bytes) -> Bytes? {
     let byte = prefix[index]
     if byte != 0xff {
       let output = @buffer.Buffer(capacity=index + 1)
-      output.write_bytes(prefix[:index])
+      output.write_bytesview(prefix[:index])
       output.write_byte((byte.to_int() + 1).to_byte())
       return Some(output.to_bytes())
     }

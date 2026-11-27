@@ -1,6 +1,6 @@
 # OrderKey
 
-**OrderKey 用多份有序 KV 导出的扫描行数和区间数预算选择复合索引，并验收交付快照。** 在冻结的 USGS 数据上，首周单批比较保留原布局。加入前两周的数据后选出候选，第三周交付实测扫描 646 条，通过 650 条预算。SDK 凭回执分页读完 593 条。 [下载 Windows / Linux 复验包](https://github.com/WeiR-h/orderkey/releases/tag/v0.2.0) · [技术摘要](docs/REVIEW.md) · [一键复验与演示](docs/DEMO.md)
+**OrderKey 用多份有序 KV 导出的扫描行数和区间数预算选择复合索引，并验收交付快照。** 在冻结的 USGS 数据上，首周单批比较保留原布局。加入前两周的数据后选出候选，第三周交付实测扫描 646 条，通过 650 条预算。SDK 凭回执分页读完 593 条。 [下载 Windows / Linux 复验包](https://github.com/WeiR-h/orderkey/releases/tag/v0.2.1) · [技术摘要](docs/REVIEW.md) · [一键复验与演示](docs/DEMO.md)
 
 解压发行包后，Windows 运行 `replay-batch-selection.cmd`，Linux 运行 `sh replay-batch-selection.sh`。复验覆盖跨批选型、真实中断恢复、留出验收和 SDK 分页。
 
@@ -10,7 +10,7 @@ OrderKey 是一个 MoonBit 库，给按无符号字节字典序排序的存储�
 
 ## 复现
 
-在完整项目的根目录运行。完整源码见 [GitHub](https://github.com/WeiR-h/orderkey)。核心历史兼容基线使用 MoonBit v0.10.20 工具链验证，MoonLSM 演示的 JS 后端需要 Node.js。 [MoonBit 工具链下载](https://www.moonbitlang.com/download/)
+在完整项目的根目录运行。v0.2.1 的编译器要求是 `moonc 1.0.0-rc1` 或以上。源码复验与发行构建使用 `toolchain.json` 固定的 `v1.0.0-rc1+3c0520448` 及对应标准库。MoonLSM 演示的 JS 后端需要 Node.js。 [源码](https://github.com/WeiR-h/orderkey) · [MoonBit 工具链下载](https://www.moonbitlang.com/download/)
 
 ```sh
 moon update
@@ -44,11 +44,11 @@ python scripts/benchmark.py --report benchmark.json
 
 ## 使用示例
 
-从 Mooncakes 安装 v0.2.0 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
+从 Mooncakes 安装 v0.2.1 的核心库。使用原生快照读取时，也安装同版本的快照 SDK。
 
 ```sh
-moon add WeiR-h/orderkey@0.2.0
-moon add WeiR-h/orderkey_snapshot@0.2.0
+moon add WeiR-h/orderkey@0.2.1
+moon add WeiR-h/orderkey_snapshot@0.2.1
 ```
 
 在调用方的 `moon.pkg` 中导入 `"WeiR-h/orderkey"`。下面的函数生成一条记录的键，以及同一租户和设备上时间戳 `[-2, 4)` 的扫描范围。

@@ -213,7 +213,7 @@ fn write_query_value(output : @buffer.Buffer, value : Value) -> Unit {
 /// Canonical, length-delimited predicate identity; independent of JSON order.
 pub fn QuerySpec::to_bytes(self : QuerySpec) -> Bytes {
   let output = @buffer.Buffer()
-  output.write_bytes(b"OKQ\x01"[:])
+  output.write_bytesview(b"OKQ\x01"[:])
   output.write_uint64_be(self.equalities.length().to_uint64())
   for (id, value) in self.equalities {
     write_part(output, id)

@@ -95,7 +95,7 @@ async fn export_rows(csv : String, month : String, out : String) -> Unit {
       ("key_hex", Json::string(@hex.encode(key[:]))),
       ("value_hex", Json::string(@hex.encode(row.payload[:]))),
     ])
-    output.write_bytes(@utf8.encode(line.stringify())[:])
+    output.write_bytesview(@utf8.encode(line.stringify())[:])
     output.write_byte(10)
   }
   @fs.mkdir(out, allow_exist=false)

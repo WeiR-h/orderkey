@@ -2,7 +2,7 @@
 /// Store this descriptor alongside the index, outside the ordered data keys.
 pub fn KeySpec::layout(self : KeySpec) -> Bytes {
   let descriptor = @buffer.Buffer(capacity=3 + self.fields.length())
-  descriptor.write_bytes(b"OK\x01"[:])
+  descriptor.write_bytesview(b"OK\x01"[:])
   for field in self.fields {
     descriptor.write_byte(
       match field {

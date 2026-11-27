@@ -65,6 +65,6 @@ fn emit_fixture_key(
 fn storage_key(key : Bytes) -> Bytes {
   let output = @buffer.Buffer()
   output.write_byte(1)
-  output.write_bytes(key[:])
+  output.write_bytesview(key[:])
   output.to_bytes()
 }
